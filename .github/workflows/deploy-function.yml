@@ -1,0 +1,32 @@
+name: Deploy Edge Function
+
+# Деплоит функцию bot в Supabase при пуше изменений в supabase/functions/**
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy function
+        run: supabase functions deploy bot --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+# Нужны два секрета репозитория (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  — токен из supabase.com/dashboard/account/tokens
+#   SUPABASE_PROJECT_REF   — ref проекта (часть xxxx из xxxx.supabase.co)
+#
+# Секреты самой функции (BOT_TOKEN, ADMIN_IDS, WEBAPP_URL) задаются один раз
+# через `supabase secrets set ...` или в дашборде — в CI их держать не нужно.

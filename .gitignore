@@ -1,0 +1,17 @@
+# deps / build
+node_modules/
+dist/
+
+# supabase local
+.branches
+.temp
+supabase/.temp/
+
+# env / secrets — НИКОГДА не коммитим токены
+.env
+.env.*
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
