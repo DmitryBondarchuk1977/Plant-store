@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
         } else if (typeof msg.text === "string" && msg.text.startsWith("/start")) {
           await upsertUser(from);
           // Каталог — INLINE-кнопкой: только так Telegram передаёт initData.
-          // (reply-клавиатура даёт пустой initData — by design.)
+          // Телефон теперь спрашиваем не здесь, а в Mini App при оформлении заявки.
           await tg("sendMessage", {
             chat_id: chatId,
             text: "👋 Это каталог. Нажмите «Открыть каталог», чтобы выбрать товары и оформить заявку.",
@@ -162,17 +162,6 @@ Deno.serve(async (req) => {
               inline_keyboard: [
                 [{ text: "🛍 Открыть каталог", web_app: { url: WEBAPP_URL } }],
               ],
-            },
-          });
-          // Отдельным сообщением — reply-клавиатура для шаринга телефона.
-          await tg("sendMessage", {
-            chat_id: chatId,
-            text: "Чтобы менеджер мог перезвонить, поделитесь номером телефона 👇",
-            reply_markup: {
-              keyboard: [
-                [{ text: "📱 Поделиться номером", request_contact: true }],
-              ],
-              resize_keyboard: true,
             },
           });
         }

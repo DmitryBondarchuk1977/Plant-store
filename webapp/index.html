@@ -355,20 +355,28 @@ function openCheckout(){
   $("f-last").value  = ME.last_name||"";
   $("f-phone").value = ME.phone||"";
   $("checkout-total").textContent = fmt(cartTotal());
-  // кнопка подтверждения номера из Telegram (Bot API 8.0+)
-  $("share-phone").classList.toggle("hidden", !(tg && typeof tg.requestContact==="function"));
+  const canRequest = tg && typeof tg.requestContact==="function";
+  // кнопка-фолбэк подтверждения номера из Telegram (Bot API 8.0+)
+  $("share-phone").classList.toggle("hidden", !canRequest);
   show("checkout");
+  // Просим контакт прямо при оформлении, если телефона ещё нет.
+  if(canRequest && !$("f-phone").value) requestPhone();
 }
-$("share-phone").onclick = ()=>{
+function requestPhone(){
+  if(!(tg && typeof tg.requestContact==="function")){
+    tg?.showAlert?.("Введите номер телефона вручную.");
+    return;
+  }
   try{
     tg.requestContact((ok, ev)=>{
-      // в разных клиентах форма ответа отличается — пытаемся вытащить телефон
+      if(!ok) return; // пользователь отказался — введёт вручную
       const c = ev?.responseUnsafe?.contact || ev?.contact;
       const phone = c?.phone_number;
-      if(phone) $("f-phone").value = phone;
+      if(phone){ $("f-phone").value = phone; tg?.HapticFeedback?.notificationOccurred?.("success"); }
     });
   }catch(e){ tg?.showAlert?.("Не удалось получить номер. Введите вручную."); }
-};
+}
+$("share-phone").onclick = requestPhone;
 
 async function submitRequest(){
   const items = Object.entries(CART).map(([product_id,qty])=>({product_id,qty}));
