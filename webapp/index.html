@@ -167,6 +167,7 @@
   <button class="btn btn-ghost btn-sm hidden" id="share-phone" style="margin-top:8px;width:100%">
     📱 Подтвердить номер из Telegram
   </button>
+  <a href="javascript:;" id="change-phone" class="hint hidden" style="display:inline-block;margin-top:8px;color:var(--link);text-decoration:none">Изменить номер</a>
   <label>Комментарий (необязательно)</label>
   <textarea id="f-comment" placeholder="Например, удобное время для звонка"></textarea>
   <div class="total-row"><span>Итого</span><span id="checkout-total"></span></div>
@@ -356,11 +357,14 @@ function openCheckout(){
   $("f-phone").value = ME.phone||"";
   $("checkout-total").textContent = fmt(cartTotal());
   const canRequest = tg && typeof tg.requestContact==="function";
-  // кнопка-фолбэк подтверждения номера из Telegram (Bot API 8.0+)
-  $("share-phone").classList.toggle("hidden", !canRequest);
+  const hasPhone = !!$("f-phone").value;
+  // Кнопку шаринга показываем только если телефона ещё нет.
+  // Если номер уже известен — даём ненавязчивую ссылку «Изменить номер».
+  $("share-phone").classList.toggle("hidden", !canRequest || hasPhone);
+  $("change-phone").classList.toggle("hidden", !canRequest || !hasPhone);
   show("checkout");
-  // Просим контакт прямо при оформлении, если телефона ещё нет.
-  if(canRequest && !$("f-phone").value) requestPhone();
+  // Просим контакт прямо при оформлении только если телефона ещё нет.
+  if(canRequest && !hasPhone) requestPhone();
 }
 function requestPhone(){
   if(!(tg && typeof tg.requestContact==="function")){
@@ -377,6 +381,7 @@ function requestPhone(){
   }catch(e){ tg?.showAlert?.("Не удалось получить номер. Введите вручную."); }
 }
 $("share-phone").onclick = requestPhone;
+$("change-phone").onclick = requestPhone;
 
 async function submitRequest(){
   const items = Object.entries(CART).map(([product_id,qty])=>({product_id,qty}));
