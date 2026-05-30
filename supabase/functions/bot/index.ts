@@ -59,26 +59,38 @@ type TgUser = { id: number; first_name?: string; last_name?: string; username?: 
 
 async function verifyInitData(initData: string): Promise<TgUser | null> {
   if (!initData) return null;
-  const params = new URLSearchParams(initData);
-  const hash = params.get("hash");
+
+  // Ручной парсинг через decodeURIComponent (URLSearchParams портит значения с '+').
+  let hash = "";
+  const all: [string, string][] = []; // все поля, кроме hash
+  for (const part of initData.split("&")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const key = part.slice(0, eq);
+    const val = decodeURIComponent(part.slice(eq + 1));
+    if (key === "hash") { hash = val; continue; }
+    all.push([key, val]);
+  }
   if (!hash) return null;
-  params.delete("hash");
 
-  const dataCheckString = [...params.entries()]
-    .map(([k, v]) => `${k}=${v}`)
-    .sort()
-    .join("\n");
+  // Принимаем подпись, если хэш сошёлся с любым из вариантов строки проверки:
+  // со signature (актуальное поведение Telegram) или без него (на будущее/совместимость).
+  const build = (withSig: boolean) =>
+    all.filter(([k]) => withSig || k !== "signature")
+      .map(([k, v]) => `${k}=${v}`)
+      .sort()
+      .join("\n");
 
-  // secret_key = HMAC_SHA256(key="WebAppData", msg=bot_token)
   const secretKey = await hmac(enc.encode("WebAppData"), BOT_TOKEN);
-  const check = toHex(await hmac(secretKey, dataCheckString));
-  if (check !== hash) return null;
+  const calcIncl = toHex(await hmac(secretKey, build(true)));
+  const calcExcl = toHex(await hmac(secretKey, build(false)));
+  if (calcIncl !== hash && calcExcl !== hash) return null;
 
-  // (необязательно) проверка свежести: не старше 24ч
-  const authDate = Number(params.get("auth_date") ?? 0);
+  // Проверка свежести: не старше 24ч
+  const authDate = Number(all.find(([k]) => k === "auth_date")?.[1] ?? 0);
   if (authDate && Date.now() / 1000 - authDate > 86400) return null;
 
-  const userRaw = params.get("user");
+  const userRaw = all.find(([k]) => k === "user")?.[1];
   if (!userRaw) return null;
   try { return JSON.parse(userRaw) as TgUser; } catch { return null; }
 }
@@ -141,14 +153,23 @@ Deno.serve(async (req) => {
           });
         } else if (typeof msg.text === "string" && msg.text.startsWith("/start")) {
           await upsertUser(from);
+          // Каталог — INLINE-кнопкой: только так Telegram передаёт initData.
+          // (reply-клавиатура даёт пустой initData — by design.)
           await tg("sendMessage", {
             chat_id: chatId,
-            text:
-              "👋 Это каталог. Нажмите «Открыть каталог», чтобы выбрать товары и оформить заявку.\n\n" +
-              "Чтобы менеджер мог перезвонить, поделитесь номером телефона.",
+            text: "👋 Это каталог. Нажмите «Открыть каталог», чтобы выбрать товары и оформить заявку.",
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "🛍 Открыть каталог", web_app: { url: WEBAPP_URL } }],
+              ],
+            },
+          });
+          // Отдельным сообщением — reply-клавиатура для шаринга телефона.
+          await tg("sendMessage", {
+            chat_id: chatId,
+            text: "Чтобы менеджер мог перезвонить, поделитесь номером телефона 👇",
             reply_markup: {
               keyboard: [
-                [{ text: "🛍 Открыть каталог", web_app: { url: WEBAPP_URL } }],
                 [{ text: "📱 Поделиться номером", request_contact: true }],
               ],
               resize_keyboard: true,
