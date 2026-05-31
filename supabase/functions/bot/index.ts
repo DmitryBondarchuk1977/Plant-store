@@ -281,6 +281,7 @@ Deno.serve(async (req) => {
           price: Number(body.price) || 0,
           is_active: body.is_active ?? true,
           sort_order: Number(body.sort_order) || 0,
+          category_id: body.category_id || null,
         };
         if (image_url !== null) payload.image_url = image_url;
 
@@ -302,6 +303,55 @@ Deno.serve(async (req) => {
         const id = url.searchParams.get("id");
         if (!id) return json({ error: "id required" }, 400);
         const { error } = await supabase.from("products").delete().eq("id", id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+    }
+
+    // -------- 4b. Админ: категории --------
+    if (path === "/admin/categories") {
+      const u = await getInitUser(req);
+      if (!u || !isAdmin(u.id)) return json({ error: "forbidden" }, 403);
+
+      if (req.method === "GET") {
+        const { data } = await supabase.from("categories")
+          .select("*").order("sort_order").order("name");
+        return json({ categories: data ?? [] });
+      }
+
+      if (req.method === "POST" || req.method === "PATCH") {
+        const body = await req.json();
+        const name = (body.name ?? "").toString().trim();
+        if (!name) return json({ error: "name required" }, 400);
+
+        let image_url = body.image_url ?? null;
+        if (body.imageBase64) {
+          const url = await uploadImage(body.imageBase64);
+          if (url) image_url = url;
+        }
+
+        const payload: Record<string, unknown> = { name, sort_order: Number(body.sort_order) || 0 };
+        if (image_url !== null) payload.image_url = image_url;
+
+        if (req.method === "POST") {
+          const { data, error } = await supabase.from("categories")
+            .insert(payload).select().single();
+          if (error) return json({ error: error.message }, 500);
+          return json({ category: data });
+        } else {
+          if (!body.id) return json({ error: "id required" }, 400);
+          const { data, error } = await supabase.from("categories")
+            .update(payload).eq("id", body.id).select().single();
+          if (error) return json({ error: error.message }, 500);
+          return json({ category: data });
+        }
+      }
+
+      if (req.method === "DELETE") {
+        const id = url.searchParams.get("id");
+        if (!id) return json({ error: "id required" }, 400);
+        // товары остаются (category_id → NULL по FK on delete set null)
+        const { error } = await supabase.from("categories").delete().eq("id", id);
         if (error) return json({ error: error.message }, 500);
         return json({ ok: true });
       }
