@@ -123,22 +123,59 @@
   .seg button{flex:1;border:none;border-radius:9px;padding:8px 4px;font-size:12.5px;font-weight:600;
     background:var(--bg);color:var(--text);cursor:pointer;opacity:.65}
   .seg button.on{opacity:1;outline:2px solid var(--btn)}
+  /* ---- hero (пастельная шапка) ---- */
+  .hero{margin:-12px -12px 16px;padding:16px 14px 18px;
+    background:linear-gradient(160deg,#dff1e6,#eef7f0);
+    border-radius:0 0 22px 22px;color:#15361f}
+  .hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px}
+  .hero-greet .hi{font-size:20px;font-weight:800;line-height:1.15}
+  .hero-greet .date{font-size:13px;color:#3c6b4e;margin-top:2px}
+  .hero .icon-btn,.hero .cart-btn{background:rgba(255,255,255,.7);color:#15361f}
+  .hero .search-wrap{margin:0 0 14px}
+  .hero .search-wrap input{background:#fff;color:#15361f;border-radius:16px}
+  .hero .search-clear{color:#7a9c89}
 
-  /* ---- search + category chips ---- */
-  .search-wrap{position:relative;margin:0 0 10px}
+  /* ---- категории кружками ---- */
+  .cats{display:flex;gap:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .cats::-webkit-scrollbar{display:none}
+  .cat{flex:none;width:64px;cursor:pointer;text-align:center}
+  .cat .circle{width:60px;height:60px;border-radius:50%;margin:0 auto 5px;overflow:hidden;
+    background:#fff;display:flex;align-items:center;justify-content:center;
+    border:2px solid transparent;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  .cat .circle img{width:100%;height:100%;object-fit:cover}
+  .cat .circle.all{font-size:12px;font-weight:700;color:#2f8f5b}
+  .cat.on .circle{border-color:#2f8f5b}
+  .cat .lbl{font-size:11px;line-height:1.15;color:#234a33;font-weight:600;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+  /* ---- search (общий) ---- */
+  .search-wrap{position:relative}
   .search-wrap input{width:100%;background:var(--card);border:1px solid transparent;border-radius:16px;
-    padding:11px 36px 11px 12px;font-size:15px;color:var(--text)}
+    padding:12px 38px 12px 14px;font-size:15px;color:var(--text)}
   .search-wrap input:focus{outline:none;border-color:var(--btn)}
-  .search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:transparent;
-    color:var(--hint);font-size:18px;cursor:pointer;line-height:1;padding:4px}
-  .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;-webkit-overflow-scrolling:touch}
-  .chips::-webkit-scrollbar{display:none}
-  .chip{flex:none;border:none;border-radius:999px;padding:6px 14px 6px 6px;font-size:13px;font-weight:600;
-    background:var(--card);color:var(--text);cursor:pointer;white-space:nowrap;
-    display:inline-flex;align-items:center;gap:7px}
-  .chip.noimg{padding-left:14px}
-  .chip img{width:24px;height:24px;border-radius:50%;object-fit:cover;flex:none;background:#0001}
-  .chip.on{background:var(--btn);color:var(--btn-text)}
+  .search-clear{position:absolute;right:10px;top:50%;transform:translateY(-50%);border:none;background:transparent;
+    font-size:18px;cursor:pointer;line-height:1;padding:4px}
+
+  /* ---- section titles ---- */
+  .sect-title{font-size:18px;font-weight:800;margin:18px 2px 12px}
+
+  /* ---- анонсы (карусель) ---- */
+  .carousel{display:flex;gap:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scroll-snap-type:x mandatory;padding-bottom:4px}
+  .carousel::-webkit-scrollbar{display:none}
+  .ann{flex:none;width:86%;aspect-ratio:16/9;border-radius:18px;overflow:hidden;position:relative;
+    background:var(--card);scroll-snap-align:center}
+  .ann img{width:100%;height:100%;object-fit:cover}
+  .ann .cap{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;font-size:16px;font-weight:700}
+  .ann .cap.light{color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.6))}
+  .ann .cap.dark{color:#14202a;background:linear-gradient(transparent,rgba(255,255,255,.75))}
+
+  /* ---- card add button ---- */
+  .card-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
+  .add-btn{flex:none;width:34px;height:34px;border-radius:50%;border:none;cursor:pointer;
+    background:var(--btn);color:var(--btn-text);font-size:20px;line-height:1;
+    display:flex;align-items:center;justify-content:center}
+  .add-btn.in{background:#1a9e5e;color:#fff}
   .cat-tag{display:inline-block;font-size:11px;color:var(--hint);margin-top:4px}
 </style>
 </head>
@@ -146,20 +183,32 @@
 
 <!-- CATALOG -->
 <section id="view-catalog">
-  <div class="topbar">
-    <h1 id="catalog-title">Каталог</h1>
-    <div class="row" style="gap:8px">
-      <button class="icon-btn hidden" id="go-admin" title="Админка" aria-label="Админка">⚙️</button>
-      <button class="cart-btn hidden" id="open-cart">Заявка
-        <span class="badge hidden" id="cart-badge">0</span>
-      </button>
+  <div class="hero">
+    <div class="hero-top">
+      <div class="hero-greet">
+        <div class="hi" id="greet-hi">Привет!</div>
+        <div class="date" id="greet-date"></div>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="icon-btn hidden" id="go-admin" title="Админка" aria-label="Админка">⚙️</button>
+        <button class="cart-btn hidden" id="open-cart" aria-label="Заявка">🛒
+          <span class="badge hidden" id="cart-badge">0</span>
+        </button>
+      </div>
     </div>
+    <div class="search-wrap">
+      <input id="search" type="text" placeholder="Поиск" autocomplete="off" />
+      <button class="search-clear hidden" id="search-clear" aria-label="Очистить">✕</button>
+    </div>
+    <div id="cats" class="cats hidden"></div>
   </div>
-  <div class="search-wrap">
-    <input id="search" type="text" placeholder="Поиск по каталогу" autocomplete="off" />
-    <button class="search-clear hidden" id="search-clear" aria-label="Очистить">✕</button>
+
+  <div id="ann-section" class="hidden">
+    <h2 class="sect-title">Скоро в продаже</h2>
+    <div id="ann-carousel" class="carousel"></div>
   </div>
-  <div id="chips" class="chips hidden"></div>
+
+  <h2 class="sect-title" id="catalog-heading">Каталог</h2>
   <div id="catalog-grid" class="grid"></div>
   <p id="catalog-empty" class="hint center hidden" style="margin-top:40px">Каталог пока пуст.</p>
   <p id="catalog-nofound" class="hint center hidden" style="margin-top:40px">Ничего не найдено.</p>
@@ -206,16 +255,22 @@
 <section id="view-admin" class="hidden">
   <div class="topbar"><h1>Админка</h1>
     <button class="cart-btn hidden" id="admin-add">+ Товар</button>
-    <button class="cart-btn hidden" id="admin-add-cat">+ Категория</button></div>
+    <button class="cart-btn hidden" id="admin-add-cat">+ Категория</button>
+    <button class="cart-btn hidden" id="admin-add-ann">+ Анонс</button></div>
   <div class="tabs">
     <button id="tab-products" class="active" onclick="switchAdminTab('products')">Товары</button>
     <button id="tab-categories" onclick="switchAdminTab('categories')">Категории</button>
+    <button id="tab-announcements" onclick="switchAdminTab('announcements')">Анонс</button>
     <button id="tab-requests" onclick="switchAdminTab('requests')">Заявки</button>
   </div>
   <div id="admin-list"></div>
   <div id="categories-wrap" class="hidden">
     <div id="categories-list"></div>
     <p id="categories-empty" class="hint center hidden" style="margin-top:24px">Категорий пока нет.</p>
+  </div>
+  <div id="announcements-wrap" class="hidden">
+    <div id="announcements-list"></div>
+    <p id="announcements-empty" class="hint center hidden" style="margin-top:24px">Анонсов пока нет.</p>
   </div>
   <div id="requests-list" class="hidden"></div>
   <p id="requests-empty" class="hint center hidden" style="margin-top:40px">Заявок пока нет.</p>
@@ -254,6 +309,21 @@
   <button class="btn btn-danger hidden" id="cf-delete" style="margin-bottom:10px">Удалить категорию</button>
 </section>
 
+<!-- ADMIN: ANNOUNCEMENT FORM -->
+<section id="view-ann-form" class="hidden">
+  <div class="topbar"><h1 id="anf-title">Новый анонс</h1></div>
+  <label>Текст анонса</label>
+  <input id="anf-title-input" type="text" placeholder="Например: Скоро новый завоз роз" />
+  <label>Картинка</label>
+  <input id="anf-file" type="file" accept="image/*" />
+  <img id="anf-preview" class="hidden" style="margin-top:10px;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:14px" />
+  <label class="row" style="margin-top:14px;color:var(--text)">
+    <input type="checkbox" id="anf-active" checked style="width:auto" /> Показывать в каталоге
+  </label>
+  <div class="spacer"></div>
+  <button class="btn btn-danger hidden" id="anf-delete" style="margin-bottom:10px">Удалить анонс</button>
+</section>
+
 <script>
 // ============ КОНФИГ — заполни своими значениями ============
 const CONFIG = {
@@ -279,8 +349,11 @@ let editingProductId = null;
 let newImageBase64 = null;
 let editingCatId = null;
 let catImageBase64 = null;
+let ANNOUNCEMENTS = [];
+let editingAnnId = null;
+let annImageBase64 = null;
 
-const VIEWS = ["catalog","detail","cart","checkout","admin","admin-form","cat-form"];
+const VIEWS = ["catalog","detail","cart","checkout","admin","admin-form","cat-form","ann-form"];
 let view = "catalog";
 
 function show(name){
@@ -303,6 +376,7 @@ function updateChrome(){
   else if(view==="admin"){ tg.BackButton.show(); tg.MainButton.hide(); }
   else if(view==="admin-form"){ tg.BackButton.show(); mainBtn("Сохранить"); }
   else if(view==="cat-form"){ tg.BackButton.show(); mainBtn("Сохранить"); }
+  else if(view==="ann-form"){ tg.BackButton.show(); mainBtn("Сохранить"); }
 }
 function mainBtn(text){ tg.MainButton.setText(text); tg.MainButton.show(); tg.MainButton.enable(); }
 
@@ -313,6 +387,7 @@ function onBack(){
   else if(view==="admin") show("catalog");
   else if(view==="admin-form") show("admin");
   else if(view==="cat-form") show("admin");
+  else if(view==="ann-form") show("admin");
 }
 function onMain(){
   if(view==="catalog"){ renderCart(); show("cart"); }
@@ -320,11 +395,12 @@ function onMain(){
   else if(view==="checkout") submitRequest();
   else if(view==="admin-form") saveProduct();
   else if(view==="cat-form") saveCategory();
+  else if(view==="ann-form") saveAnnouncement();
 }
 
 // ---------- Cart ----------
 function loadCart(){ try{ return JSON.parse(localStorage.getItem("cart")||"{}"); }catch{ return {}; } }
-function saveCart(){ try{ localStorage.setItem("cart", JSON.stringify(CART)); }catch{} renderBadge(); }
+function saveCart(){ try{ localStorage.setItem("cart", JSON.stringify(CART)); }catch{} renderBadge(); refreshAddButtons(); }
 function cartCount(){ return Object.values(CART).reduce((a,b)=>a+b,0); }
 function cartTotal(){ return Object.entries(CART).reduce((s,[id,q])=>{ const p=PRODUCTS.find(x=>x.id===id); return s+(p?Number(p.price)*q:0); },0); }
 function renderBadge(){
@@ -334,38 +410,90 @@ function renderBadge(){
   $("open-cart").classList.toggle("hidden", n===0);  // прячем кнопку, пока заявка пуста
 }
 
+// ---------- Greeting ----------
+function renderGreeting(){
+  const name = (ME.first_name||"").trim();
+  $("greet-hi").textContent = name ? `Привет, ${name}!` : "Привет!";
+  const d = new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"long"});
+  $("greet-date").textContent = "Сегодня " + d;
+}
+
 // ---------- Catalog ----------
 async function loadCatalog(){
-  const [pRes, cRes] = await Promise.all([
+  const [pRes, cRes, aRes] = await Promise.all([
     sb.from("products").select("*").eq("is_active", true)
       .order("sort_order").order("created_at",{ascending:false}),
     sb.from("categories").select("*").order("sort_order").order("name"),
+    sb.from("announcements").select("*").eq("is_active", true)
+      .order("sort_order").order("created_at",{ascending:false}),
   ]);
   PRODUCTS = pRes.error ? [] : (pRes.data||[]);
   CATEGORIES = cRes.error ? [] : (cRes.data||[]);
-  renderChips();
+  ANNOUNCEMENTS = aRes.error ? [] : (aRes.data||[]);
+  renderCategories();
+  renderAnnouncements();
   renderCatalog();
   renderBadge();
 }
 function catName(id){ return CATEGORIES.find(c=>c.id===id)?.name || ""; }
 
-function renderChips(){
-  const box = $("chips");
-  // показываем чипсы, только если есть хотя бы одна категория с товарами
+function renderCategories(){
+  const box = $("cats");
   const usedIds = new Set(PRODUCTS.map(p=>p.category_id).filter(Boolean));
   const cats = CATEGORIES.filter(c=>usedIds.has(c.id));
   box.classList.toggle("hidden", cats.length===0);
   if(!cats.length){ selectedCat=null; box.innerHTML=""; return; }
   box.innerHTML="";
-  const mk = (id,label,img)=>{
-    const b=document.createElement("button");
-    b.className="chip"+(selectedCat===id?" on":"")+(img?"":" noimg");
-    b.innerHTML = (img?`<img src="${img}" alt="">`:"") + `<span>${escapeHtml(label)}</span>`;
-    b.onclick=()=>{ selectedCat=id; renderChips(); renderCatalog(); };
-    return b;
+  const mk = (id,label,img,isAll)=>{
+    const el=document.createElement("div");
+    el.className="cat"+(selectedCat===id?" on":"");
+    const circle = isAll
+      ? `<div class="circle all">Все</div>`
+      : `<div class="circle">${img?`<img src="${img}" alt="">`:""}</div>`;
+    el.innerHTML = circle + `<div class="lbl">${escapeHtml(label)}</div>`;
+    el.onclick=()=>{ selectedCat=id; renderCategories(); renderCatalog(); };
+    return el;
   };
-  box.appendChild(mk(null,"Все",""));
-  cats.forEach(c=> box.appendChild(mk(c.id, c.name, c.image_url)));
+  box.appendChild(mk(null,"Все","",true));
+  cats.forEach(c=> box.appendChild(mk(c.id, c.name, c.image_url, false)));
+}
+
+// ---------- Announcements (карусель) ----------
+function renderAnnouncements(){
+  const sec = $("ann-section"), box = $("ann-carousel");
+  box.innerHTML="";
+  sec.classList.toggle("hidden", ANNOUNCEMENTS.length===0);
+  ANNOUNCEMENTS.forEach(a=>{
+    const el=document.createElement("div");
+    el.className="ann";
+    el.innerHTML = `${a.image_url?`<img src="${a.image_url}" alt="">`:""}` +
+      (a.title?`<div class="cap light">${escapeHtml(a.title)}</div>`:"");
+    box.appendChild(el);
+    // подбор цвета текста под яркость картинки
+    if(a.title && a.image_url){
+      pickTextColor(a.image_url, (tone)=>{
+        const cap = el.querySelector(".cap");
+        if(cap){ cap.classList.remove("light","dark"); cap.classList.add(tone); }
+      });
+    }
+  });
+}
+function pickTextColor(url, cb){
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = ()=>{
+    try{
+      const w=24,h=24, c=document.createElement("canvas"); c.width=w; c.height=h;
+      const ctx=c.getContext("2d"); ctx.drawImage(img,0,0,w,h);
+      const y0=Math.floor(h*0.55);
+      const data=ctx.getImageData(0,y0,w,h-y0).data;
+      let sum=0,n=0;
+      for(let i=0;i<data.length;i+=4){ sum+=0.2126*data[i]+0.7152*data[i+1]+0.0722*data[i+2]; n++; }
+      cb((sum/n) > 150 ? "dark" : "light");
+    }catch(e){ cb("light"); } // CORS/taint → светлый текст со скримом (всегда читаемо)
+  };
+  img.onerror = ()=> cb("light");
+  img.src = url;
 }
 
 function filteredProducts(){
@@ -380,6 +508,15 @@ function filteredProducts(){
   });
 }
 
+function setAddBtn(btn, id){
+  const inCart = CART[id]>0;
+  btn.textContent = inCart ? "✓" : "+";
+  btn.classList.toggle("in", inCart);
+}
+function refreshAddButtons(){
+  document.querySelectorAll(".add-btn[data-id]").forEach(b=> setAddBtn(b, b.dataset.id));
+}
+
 function renderCatalog(){
   const grid = $("catalog-grid"); grid.innerHTML="";
   const list = filteredProducts();
@@ -392,9 +529,20 @@ function renderCatalog(){
       <div class="thumb">${p.image_url?`<img src="${p.image_url}" alt="">`:""}</div>
       <div class="body">
         <div class="name">${escapeHtml(p.name)}</div>
-        <div class="price">${fmt(p.price)}</div>
+        <div class="card-bottom">
+          <div class="price">${fmt(p.price)}</div>
+          <button class="add-btn" data-id="${p.id}" aria-label="В заявку">+</button>
+        </div>
       </div>`;
     el.onclick = ()=> openDetail(p.id);
+    const add = el.querySelector(".add-btn");
+    setAddBtn(add, p.id);
+    add.onclick = (e)=>{
+      e.stopPropagation();
+      if(CART[p.id]>0) delete CART[p.id]; else CART[p.id]=1;
+      saveCart(); setAddBtn(add, p.id);
+      tg?.HapticFeedback?.impactOccurred?.("light");
+    };
     grid.appendChild(el);
   });
 }
@@ -544,14 +692,18 @@ function switchAdminTab(tab){
   adminTab = tab;
   $("tab-products").classList.toggle("active", tab==="products");
   $("tab-categories").classList.toggle("active", tab==="categories");
+  $("tab-announcements").classList.toggle("active", tab==="announcements");
   $("tab-requests").classList.toggle("active", tab==="requests");
   $("admin-list").classList.toggle("hidden", tab!=="products");
   $("admin-add").classList.toggle("hidden", tab!=="products");
   $("admin-add-cat").classList.toggle("hidden", tab!=="categories");
+  $("admin-add-ann").classList.toggle("hidden", tab!=="announcements");
   $("categories-wrap").classList.toggle("hidden", tab!=="categories");
+  $("announcements-wrap").classList.toggle("hidden", tab!=="announcements");
   $("requests-list").classList.toggle("hidden", tab!=="requests");
   $("requests-empty").classList.add("hidden");
   if(tab==="categories") loadCategoriesAdmin();
+  if(tab==="announcements") loadAnnouncementsAdmin();
   if(tab==="requests") loadRequests();
 }
 
@@ -614,6 +766,65 @@ function deleteCategory(c){
   tg?.showConfirm ? tg.showConfirm(`Удалить категорию «${c.name}»? Товары останутся без категории.`, ok=>ok&&go())
                   : (confirm("Удалить категорию?") && go());
 }
+
+// ---------- Анонсы (админ) ----------
+async function loadAnnouncementsAdmin(){
+  const res = await api("/admin/announcements","GET");
+  const items = res?.announcements || [];
+  const list = $("announcements-list"); list.innerHTML="";
+  $("announcements-empty").classList.toggle("hidden", items.length>0);
+  items.forEach(a=>{
+    const el=document.createElement("div");
+    el.className="admin-item";
+    el.innerHTML=`
+      <img src="${a.image_url||""}" alt="" />
+      <div class="meta">
+        <div class="name">${escapeHtml(a.title||"(без текста)")}</div>
+        <div class="hint"><span class="tag ${a.is_active?'on':'off'}">${a.is_active?'показывается':'скрыт'}</span></div>
+      </div>
+      <button class="btn btn-ghost btn-sm">✎</button>`;
+    el.querySelector("button").onclick=()=>openAnnForm(a);
+    list.appendChild(el);
+  });
+}
+function openAnnForm(a){
+  editingAnnId = a?.id || null;
+  annImageBase64 = null;
+  $("anf-title").textContent = a ? "Анонс" : "Новый анонс";
+  $("anf-title-input").value = a?.title || "";
+  $("anf-active").checked = a ? !!a.is_active : true;
+  const prev=$("anf-preview");
+  if(a?.image_url){ prev.src=a.image_url; prev.classList.remove("hidden"); } else prev.classList.add("hidden");
+  $("anf-delete").classList.toggle("hidden", !a);
+  $("anf-file").value="";
+  show("ann-form");
+}
+$("anf-file").onchange = (e)=>{
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{ annImageBase64=r.result; $("anf-preview").src=r.result; $("anf-preview").classList.remove("hidden"); };
+  r.readAsDataURL(file);
+};
+async function saveAnnouncement(){
+  const payload={ title:$("anf-title-input").value.trim(), is_active:$("anf-active").checked };
+  if(annImageBase64) payload.imageBase64=annImageBase64;
+  tg?.MainButton.showProgress?.();
+  let res;
+  if(editingAnnId){ payload.id=editingAnnId; res=await api("/admin/announcements","PATCH",payload); }
+  else res=await api("/admin/announcements","POST",payload);
+  tg?.MainButton.hideProgress?.();
+  if(res?.announcement){ await loadCatalog(); await loadAnnouncementsAdmin(); show("admin"); }
+  else tg?.showAlert?.("Ошибка: "+(res?.error||"не удалось сохранить"));
+}
+$("anf-delete").onclick = ()=>{
+  if(!editingAnnId) return;
+  const go = async ()=>{
+    const res=await api("/admin/announcements?id="+editingAnnId,"DELETE");
+    if(res?.ok){ await loadCatalog(); await loadAnnouncementsAdmin(); show("admin"); }
+    else tg?.showAlert?.("Ошибка удаления");
+  };
+  tg?.showConfirm ? tg.showConfirm("Удалить анонс?", ok=>ok&&go()) : (confirm("Удалить анонс?") && go());
+};
 
 // ---------- Заявки ----------
 const STATUSES = [
@@ -743,6 +954,7 @@ $("open-cart").onclick = ()=>{ renderCart(); show("cart"); };
 $("go-admin").onclick  = ()=> openAdmin();
 $("admin-add").onclick = ()=> openAdminForm(null);
 $("admin-add-cat").onclick = ()=> openCatForm(null);
+$("admin-add-ann").onclick = ()=> openAnnForm(null);
 $("cf-delete").onclick = ()=>{ if(editingCatId) deleteCategory(CATEGORIES.find(c=>c.id===editingCatId)||{id:editingCatId,name:""}); };
 
 // ---------- search ----------
@@ -761,9 +973,11 @@ $("search-clear").onclick = ()=>{
 (async function init(){
   tg?.ready(); tg?.expand?.();
   try{ tg?.setHeaderColor?.("secondary_bg_color"); }catch{}
+  renderGreeting();
   await loadCatalog();
   const me = await api("/me","POST",{});
   if(me && !me.error){ ME = me; }
+  renderGreeting();
   $("go-admin").classList.toggle("hidden", !ME.is_admin);
   show("catalog");
 })();

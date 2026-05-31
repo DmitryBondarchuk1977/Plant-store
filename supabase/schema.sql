@@ -3,6 +3,25 @@
 --  Запусти весь файл в Supabase → SQL Editor
 -- ============================================================
 
+-- ---------- Категории ----------
+create table if not exists public.categories (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  image_url   text,
+  sort_order  int not null default 0,
+  created_at  timestamptz not null default now()
+);
+
+-- ---------- Анонсы («Скоро в продаже») ----------
+create table if not exists public.announcements (
+  id          uuid primary key default gen_random_uuid(),
+  title       text,
+  image_url   text,
+  is_active   boolean not null default true,
+  sort_order  int not null default 0,
+  created_at  timestamptz not null default now()
+);
+
 -- ---------- Товары каталога ----------
 create table if not exists public.products (
   id          uuid primary key default gen_random_uuid(),
@@ -10,6 +29,7 @@ create table if not exists public.products (
   description text,
   price       numeric(12,2) not null default 0,
   image_url   text,
+  category_id uuid references public.categories(id) on delete set null,
   is_active   boolean not null default true,   -- модерация: показывать в каталоге или нет
   sort_order  int not null default 0,
   created_at  timestamptz not null default now()
@@ -51,11 +71,14 @@ create table if not exists public.request_items (
 
 create index if not exists idx_request_items_request on public.request_items(request_id);
 create index if not exists idx_products_active on public.products(is_active, sort_order);
+create index if not exists idx_products_category on public.products(category_id);
 
 -- ============================================================
 --  RLS (Row Level Security)
 -- ============================================================
 alter table public.products      enable row level security;
+alter table public.categories    enable row level security;
+alter table public.announcements enable row level security;
 alter table public.app_users     enable row level security;
 alter table public.requests      enable row level security;
 alter table public.request_items enable row level security;
@@ -64,6 +87,18 @@ alter table public.request_items enable row level security;
 drop policy if exists "public read active products" on public.products;
 create policy "public read active products"
   on public.products for select
+  using (is_active = true);
+
+-- Категории: публичное чтение (для чипсов-фильтров в каталоге).
+drop policy if exists "public read categories" on public.categories;
+create policy "public read categories"
+  on public.categories for select
+  using (true);
+
+-- Анонсы: публичное чтение активных.
+drop policy if exists "public read announcements" on public.announcements;
+create policy "public read announcements"
+  on public.announcements for select
   using (is_active = true);
 
 -- Запись в products / app_users / requests / request_items — НИКОМУ через anon.

@@ -357,6 +357,54 @@ Deno.serve(async (req) => {
       }
     }
 
+    // -------- 4c. Админ: анонсы --------
+    if (path === "/admin/announcements") {
+      const u = await getInitUser(req);
+      if (!u || !isAdmin(u.id)) return json({ error: "forbidden" }, 403);
+
+      if (req.method === "GET") {
+        const { data } = await supabase.from("announcements")
+          .select("*").order("sort_order").order("created_at", { ascending: false });
+        return json({ announcements: data ?? [] });
+      }
+
+      if (req.method === "POST" || req.method === "PATCH") {
+        const body = await req.json();
+        let image_url = body.image_url ?? null;
+        if (body.imageBase64) {
+          const url2 = await uploadImage(body.imageBase64);
+          if (url2) image_url = url2;
+        }
+        const payload: Record<string, unknown> = {
+          title: body.title ?? null,
+          is_active: body.is_active ?? true,
+          sort_order: Number(body.sort_order) || 0,
+        };
+        if (image_url !== null) payload.image_url = image_url;
+
+        if (req.method === "POST") {
+          const { data, error } = await supabase.from("announcements")
+            .insert(payload).select().single();
+          if (error) return json({ error: error.message }, 500);
+          return json({ announcement: data });
+        } else {
+          if (!body.id) return json({ error: "id required" }, 400);
+          const { data, error } = await supabase.from("announcements")
+            .update(payload).eq("id", body.id).select().single();
+          if (error) return json({ error: error.message }, 500);
+          return json({ announcement: data });
+        }
+      }
+
+      if (req.method === "DELETE") {
+        const id = url.searchParams.get("id");
+        if (!id) return json({ error: "id required" }, 400);
+        const { error } = await supabase.from("announcements").delete().eq("id", id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+    }
+
     // -------- 5. Админ: заявки --------
     if (path === "/admin/requests") {
       const u = await getInitUser(req);
