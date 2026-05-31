@@ -267,13 +267,6 @@ Deno.serve(async (req) => {
 
       if (req.method === "POST" || req.method === "PATCH") {
         const body = await req.json();
-        let image_url = body.image_url ?? null;
-
-        // Если прислали картинку base64 — грузим в Storage
-        if (body.imageBase64) {
-          const url = await uploadImage(body.imageBase64);
-          if (url) image_url = url;
-        }
 
         const payload: Record<string, unknown> = {
           name: body.name,
@@ -283,7 +276,22 @@ Deno.serve(async (req) => {
           sort_order: Number(body.sort_order) || 0,
           category_id: body.category_id || null,
         };
-        if (image_url !== null) payload.image_url = image_url;
+
+        // Картинки: оставляем переданные URL + грузим новые из base64.
+        const kept: string[] = Array.isArray(body.images) ? body.images.filter(Boolean) : [];
+        const newB64: string[] = Array.isArray(body.imagesBase64) ? body.imagesBase64 : [];
+        if (body.imageBase64) newB64.push(body.imageBase64); // обратная совместимость (одно фото)
+        const uploaded: string[] = [];
+        for (const b64 of newB64) {
+          const u = await uploadImage(b64);
+          if (u) uploaded.push(u);
+        }
+        // Обновляем галерею только если клиент прислал инфу о картинках.
+        if (Array.isArray(body.images) || newB64.length) {
+          const images = [...kept, ...uploaded];
+          payload.images = images;
+          payload.image_url = images[0] ?? null; // обложка = первое фото
+        }
 
         if (req.method === "POST") {
           const { data, error } = await supabase.from("products")
@@ -413,7 +421,7 @@ Deno.serve(async (req) => {
       if (req.method === "GET") {
         const { data, error } = await supabase
           .from("requests")
-          .select("*, items:request_items(*)")
+          .select("*, items:request_items(*, product:products(image_url, images, description, category_id, is_active))")
           .order("created_at", { ascending: false })
           .limit(200);
         if (error) return json({ error: error.message }, 500);

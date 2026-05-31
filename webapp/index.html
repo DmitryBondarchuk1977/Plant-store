@@ -43,10 +43,10 @@
 
   /* ---- catalog grid ---- */
   .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;align-items:stretch}
-  .card{background:var(--card);border-radius:var(--radius);overflow:hidden;
-    cursor:pointer;display:flex;flex-direction:column}
+  .card{background:linear-gradient(160deg,#dff1e6,#eef7f0);color:#1c3b29;
+    border-radius:var(--radius);overflow:hidden;cursor:pointer;display:flex;flex-direction:column}
   .card .thumb{aspect-ratio:1/1;width:100%;padding:8px;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(160deg,#dff1e6,#eef7f0)}
+    background:transparent}
   .card .thumb img{max-width:100%;max-height:100%;object-fit:contain;border-radius:10px}
   .card .body{padding:10px 12px;display:flex;flex-direction:column;flex:1}
   .card .name{font-size:14px;font-weight:600;line-height:1.25;
@@ -54,8 +54,12 @@
   .card .price{font-size:15px}
 
   /* ---- detail ---- */
-  .detail-img-wrap{width:100%;aspect-ratio:1/1;background:linear-gradient(160deg,#dff1e6,#eef7f0);
-    border-radius:var(--radius);padding:10px;display:flex;align-items:center;justify-content:center}
+  .detail-gallery{display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scroll-snap-type:x mandatory}
+  .detail-gallery::-webkit-scrollbar{display:none}
+  .detail-img-wrap{flex:none;width:100%;aspect-ratio:1/1;background:linear-gradient(160deg,#dff1e6,#eef7f0);
+    border-radius:var(--radius);padding:10px;display:flex;align-items:center;justify-content:center;
+    scroll-snap-align:center}
   .detail-img-wrap img{max-width:100%;max-height:100%;object-fit:contain;border-radius:12px}
   .detail h2{margin:14px 0 4px;font-size:22px}
   .detail .desc{color:var(--text);margin:10px 0;white-space:pre-wrap}
@@ -112,6 +116,15 @@
   .req .who{margin:8px 0 2px;font-size:14px;font-weight:600}
   .req .contact a{color:var(--link);text-decoration:none;font-size:14px}
   .req .lines{margin:8px 0;font-size:13px;color:var(--text)}
+  .req-items{margin:8px 0;display:flex;flex-direction:column;gap:6px}
+  .req-item{display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:10px;padding:6px;cursor:pointer}
+  .req-item .ri-thumb{width:46px;height:46px;flex:none;border-radius:8px;overflow:hidden;
+    background:linear-gradient(160deg,#dff1e6,#eef7f0);display:flex;align-items:center;justify-content:center}
+  .req-item .ri-thumb img{width:100%;height:100%;object-fit:contain}
+  .req-item .ri-meta{flex:1;min-width:0}
+  .req-item .ri-name{font-size:13px;font-weight:600;line-height:1.2}
+  .req-item .ri-sub{font-size:12px;color:var(--hint);margin-top:2px}
+  .req-item .ri-arrow{color:var(--hint);font-size:20px;flex:none}
   .req .lines div{padding:1px 0}
   .req .cmt{font-size:13px;color:var(--hint);margin:6px 0;font-style:italic}
   .req .sum{font-weight:700;margin:6px 0 10px}
@@ -178,6 +191,14 @@
     display:flex;align-items:center;justify-content:center}
   .add-btn.in{background:#1a9e5e;color:#fff}
   .cat-tag{display:inline-block;font-size:11px;color:var(--hint);margin-top:4px}
+  .form-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .form-gallery .fg-item{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;
+    background:linear-gradient(160deg,#dff1e6,#eef7f0)}
+  .form-gallery .fg-item img{width:100%;height:100%;object-fit:contain}
+  .form-gallery .fg-x{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;
+    border:none;background:rgba(0,0,0,.6);color:#fff;font-size:13px;line-height:1;cursor:pointer}
+  .form-gallery .fg-cover{position:absolute;bottom:0;left:0;right:0;font-size:9px;text-align:center;
+    background:rgba(0,0,0,.55);color:#fff;padding:1px}
 </style>
 </head>
 <body>
@@ -217,7 +238,7 @@
 
 <!-- DETAIL -->
 <section id="view-detail" class="hidden detail">
-  <div class="detail-img-wrap"><img id="d-img" alt="" /></div>
+  <div id="d-gallery" class="detail-gallery"></div>
   <h2 id="d-name"></h2>
   <div id="d-cat" class="cat-tag hidden"></div>
   <div id="d-price" class="price" style="font-size:20px"></div>
@@ -288,9 +309,9 @@
   <select id="af-category"></select>
   <label>Цена, ₽</label>
   <input id="af-price" type="number" inputmode="decimal" />
-  <label>Картинка</label>
-  <input id="af-file" type="file" accept="image/*" />
-  <img id="af-preview" class="hidden" style="margin-top:10px;width:120px;height:120px;object-fit:cover;border-radius:12px" />
+  <label>Фото (можно несколько, первое — обложка)</label>
+  <input id="af-file" type="file" accept="image/*" multiple />
+  <div id="af-gallery" class="form-gallery"></div>
   <label class="row" style="margin-top:14px;color:var(--text)">
     <input type="checkbox" id="af-active" checked style="width:auto" /> Показывать в каталоге
   </label>
@@ -347,7 +368,6 @@ let CART = loadCart();       // { productId: qty }
 let ME = { is_admin:false, first_name:"", last_name:"", phone:"" };
 let currentProductId = null;
 let editingProductId = null;
-let newImageBase64 = null;
 let editingCatId = null;
 let catImageBase64 = null;
 let ANNOUNCEMENTS = [];
@@ -382,7 +402,7 @@ function updateChrome(){
 function mainBtn(text){ tg.MainButton.setText(text); tg.MainButton.show(); tg.MainButton.enable(); }
 
 function onBack(){
-  if(view==="detail") show("catalog");
+  if(view==="detail") show(detailReturn);
   else if(view==="cart") show("catalog");
   else if(view==="checkout") show("cart");
   else if(view==="admin") show("catalog");
@@ -549,17 +569,49 @@ function renderCatalog(){
 }
 
 // ---------- Detail ----------
+let detailReturn = "catalog";
 function openDetail(id){
   const p = PRODUCTS.find(x=>x.id===id); if(!p) return;
-  currentProductId = id;
-  $("d-img").src = p.image_url||"";
+  detailReturn = "catalog";
+  showProductDetail(p, true);
+}
+// открытие товара из заявки (админ): данные берём из позиции + встроенного товара
+function openItemDetail(item){
+  const emb = item.product || {};
+  const p = {
+    id: item.product_id,
+    name: item.product_name || "Товар",
+    price: item.price,
+    image_url: emb.image_url || "",
+    images: emb.images || (emb.image_url ? [emb.image_url] : []),
+    description: emb.description || "",
+    category_id: emb.category_id || null,
+  };
+  detailReturn = "admin";
+  showProductDetail(p, false);
+}
+function renderDetailImages(p){
+  const imgs = (p.images && p.images.length) ? p.images : (p.image_url ? [p.image_url] : []);
+  const g = $("d-gallery"); g.innerHTML = "";
+  if(!imgs.length){ g.innerHTML = `<div class="detail-img-wrap"></div>`; return; }
+  imgs.forEach(src=>{
+    const w = document.createElement("div");
+    w.className = "detail-img-wrap";
+    w.innerHTML = `<img src="${src}" alt="">`;
+    g.appendChild(w);
+  });
+}
+function showProductDetail(p, showAdd){
+  currentProductId = p.id;
+  renderDetailImages(p);
   $("d-name").textContent = p.name;
   const cat = catName(p.category_id);
   $("d-cat").textContent = cat;
   $("d-cat").classList.toggle("hidden", !cat);
   $("d-price").textContent = fmt(p.price);
   $("d-desc").textContent = p.description||"";
-  renderDetailBtn();
+  $("d-add").classList.toggle("hidden", !showAdd);
+  if(showAdd) renderDetailBtn();
   show("detail");
 }
 function renderDetailBtn(){
@@ -847,7 +899,6 @@ function renderRequest(r){
   const el = document.createElement("div");
   el.className = "req";
   const date = new Date(r.created_at).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
-  const items = (r.items||[]).map(i=>`<div>• ${escapeHtml(i.product_name)} × ${i.qty} — ${fmt(i.price*i.qty)}</div>`).join("");
   const phone = (r.phone||"").trim();
   const name = `${escapeHtml(r.customer_first_name||"")} ${escapeHtml(r.customer_last_name||"")}`.trim() || "—";
   el.innerHTML = `
@@ -859,9 +910,25 @@ function renderRequest(r){
     <div class="who">${name}</div>
     <div class="contact">${phone ? `<a href="tel:${phone}">📞 ${escapeHtml(phone)}</a>` : '<span class="hint">телефон не указан</span>'}</div>
     ${r.comment ? `<div class="cmt">💬 ${escapeHtml(r.comment)}</div>` : ""}
-    <div class="lines">${items}</div>
+    <div class="req-items"></div>
     <div class="sum">Итого: ${fmt(r.total)}</div>
     <div class="seg"></div>`;
+  // позиции с миниатюрами, клик → детальный товара
+  const itemsBox = el.querySelector(".req-items");
+  (r.items||[]).forEach(i=>{
+    const img = i.product?.image_url || "";
+    const row = document.createElement("div");
+    row.className = "req-item";
+    row.innerHTML = `
+      <div class="ri-thumb">${img?`<img src="${img}" alt="">`:""}</div>
+      <div class="ri-meta">
+        <div class="ri-name">${escapeHtml(i.product_name)}</div>
+        <div class="ri-sub">× ${i.qty} — ${fmt(i.price*i.qty)}</div>
+      </div>
+      <div class="ri-arrow">›</div>`;
+    row.onclick = ()=> openItemDetail(i);
+    itemsBox.appendChild(row);
+  });
   const seg = el.querySelector(".seg");
   STATUSES.forEach(s=>{
     const b = document.createElement("button");
@@ -884,30 +951,47 @@ async function setStatus(r, status, el){
     tg?.showAlert?.("Не удалось изменить статус: "+(res?.error||""));
   }
 }
+let productImages = []; // [{url} | {base64}]
 function openAdminForm(p){
   editingProductId = p?.id || null;
-  newImageBase64 = null;
   $("af-title").textContent = p ? "Редактирование" : "Новый товар";
   $("af-name").value = p?.name||"";
   $("af-desc").value = p?.description||"";
   $("af-price").value = p?.price||"";
   $("af-active").checked = p ? !!p.is_active : true;
-  // селект категорий
   const sel = $("af-category");
   sel.innerHTML = '<option value="">— без категории —</option>' +
     CATEGORIES.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
   sel.value = p?.category_id || "";
-  const prev=$("af-preview");
-  if(p?.image_url){ prev.src=p.image_url; prev.classList.remove("hidden"); } else prev.classList.add("hidden");
+  // галерея: существующие фото из images (или одиночное image_url)
+  const existing = (p?.images && p.images.length) ? p.images : (p?.image_url ? [p.image_url] : []);
+  productImages = existing.map(url=>({url}));
+  renderProductGallery();
   $("af-delete").classList.toggle("hidden", !p);
   $("af-file").value="";
   show("admin-form");
 }
+function renderProductGallery(){
+  const box = $("af-gallery"); box.innerHTML="";
+  productImages.forEach((im, idx)=>{
+    const src = im.url || im.base64;
+    const el = document.createElement("div");
+    el.className="fg-item";
+    el.innerHTML = `<img src="${src}" alt="">
+      <button class="fg-x" type="button" aria-label="Удалить">✕</button>
+      ${idx===0?'<div class="fg-cover">обложка</div>':''}`;
+    el.querySelector(".fg-x").onclick=()=>{ productImages.splice(idx,1); renderProductGallery(); };
+    box.appendChild(el);
+  });
+}
 $("af-file").onchange = (e)=>{
-  const file=e.target.files[0]; if(!file) return;
-  const r=new FileReader();
-  r.onload=()=>{ newImageBase64=r.result; $("af-preview").src=r.result; $("af-preview").classList.remove("hidden"); };
-  r.readAsDataURL(file);
+  const files = Array.from(e.target.files||[]);
+  files.forEach(file=>{
+    const r=new FileReader();
+    r.onload=()=>{ productImages.push({base64:r.result}); renderProductGallery(); };
+    r.readAsDataURL(file);
+  });
+  e.target.value=""; // позволяем выбрать те же файлы снова
 };
 async function saveProduct(){
   const name=$("af-name").value.trim();
@@ -916,8 +1000,9 @@ async function saveProduct(){
     name, description:$("af-desc").value.trim(),
     price:Number($("af-price").value)||0, is_active:$("af-active").checked,
     category_id: $("af-category").value || null,
+    images: productImages.filter(x=>x.url).map(x=>x.url),       // оставленные
+    imagesBase64: productImages.filter(x=>x.base64).map(x=>x.base64), // новые
   };
-  if(newImageBase64) payload.imageBase64=newImageBase64;
   tg?.MainButton.showProgress?.();
   let res;
   if(editingProductId){ payload.id=editingProductId; res=await api("/admin/products","PATCH",payload); }

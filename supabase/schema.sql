@@ -29,6 +29,7 @@ create table if not exists public.products (
   description text,
   price       numeric(12,2) not null default 0,
   image_url   text,
+  images      text[] not null default '{}',
   category_id uuid references public.categories(id) on delete set null,
   is_active   boolean not null default true,   -- модерация: показывать в каталоге или нет
   sort_order  int not null default 0,
