@@ -144,7 +144,7 @@
 <section id="view-catalog">
   <div class="topbar">
     <h1 id="catalog-title">Каталог</h1>
-    <button class="cart-btn" id="open-cart">Заявка
+    <button class="cart-btn hidden" id="open-cart">Заявка
       <span class="badge hidden" id="cart-badge">0</span>
     </button>
   </div>
@@ -322,7 +322,12 @@ function loadCart(){ try{ return JSON.parse(localStorage.getItem("cart")||"{}");
 function saveCart(){ try{ localStorage.setItem("cart", JSON.stringify(CART)); }catch{} renderBadge(); }
 function cartCount(){ return Object.values(CART).reduce((a,b)=>a+b,0); }
 function cartTotal(){ return Object.entries(CART).reduce((s,[id,q])=>{ const p=PRODUCTS.find(x=>x.id===id); return s+(p?Number(p.price)*q:0); },0); }
-function renderBadge(){ const n=cartCount(); $("cart-badge").textContent=n; $("cart-badge").classList.toggle("hidden", n===0); }
+function renderBadge(){
+  const n=cartCount();
+  $("cart-badge").textContent=n;
+  $("cart-badge").classList.toggle("hidden", n===0);
+  $("open-cart").classList.toggle("hidden", n===0);  // прячем кнопку, пока заявка пуста
+}
 
 // ---------- Catalog ----------
 async function loadCatalog(){
