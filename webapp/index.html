@@ -45,14 +45,14 @@
   .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
   .card{background:var(--card);border-radius:var(--radius);overflow:hidden;
     cursor:pointer;display:flex;flex-direction:column}
-  .card .thumb{aspect-ratio:1/1;background:#0001 center/cover no-repeat;width:100%}
+  .card .thumb{aspect-ratio:1/1;background:var(--card) center/contain no-repeat;width:100%}
   .card .body{padding:10px 12px}
   .card .name{font-size:14px;font-weight:600;line-height:1.25;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .card .price{margin-top:6px;font-size:15px}
 
   /* ---- detail ---- */
-  .detail-img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:var(--radius);
+  .detail-img{width:100%;aspect-ratio:1/1;object-fit:contain;border-radius:var(--radius);
     background:var(--card)}
   .detail h2{margin:14px 0 4px;font-size:22px}
   .detail .desc{color:var(--text);margin:10px 0;white-space:pre-wrap}
