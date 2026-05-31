@@ -35,6 +35,8 @@
   .topbar h1{font-size:20px;margin:0}
   .cart-btn{position:relative;border:none;background:var(--card);color:var(--text);
     border-radius:12px;padding:8px 12px;font-size:15px;font-weight:600}
+  .icon-btn{border:none;background:var(--card);color:var(--text);border-radius:12px;
+    width:38px;height:38px;font-size:18px;line-height:1;cursor:pointer;flex:none}
   .badge{position:absolute;top:-6px;right:-6px;background:var(--btn);color:var(--btn-text);
     min-width:20px;height:20px;border-radius:10px;font-size:12px;font-weight:700;
     display:flex;align-items:center;justify-content:center;padding:0 5px}
@@ -144,9 +146,12 @@
 <section id="view-catalog">
   <div class="topbar">
     <h1 id="catalog-title">Каталог</h1>
-    <button class="cart-btn hidden" id="open-cart">Заявка
-      <span class="badge hidden" id="cart-badge">0</span>
-    </button>
+    <div class="row" style="gap:8px">
+      <button class="icon-btn hidden" id="go-admin" title="Админка" aria-label="Админка">⚙️</button>
+      <button class="cart-btn hidden" id="open-cart">Заявка
+        <span class="badge hidden" id="cart-badge">0</span>
+      </button>
+    </div>
   </div>
   <div class="search-wrap">
     <input id="search" type="text" placeholder="Поиск по каталогу" autocomplete="off" />
@@ -156,8 +161,6 @@
   <div id="catalog-grid" class="grid"></div>
   <p id="catalog-empty" class="hint center hidden" style="margin-top:40px">Каталог пока пуст.</p>
   <p id="catalog-nofound" class="hint center hidden" style="margin-top:40px">Ничего не найдено.</p>
-  <div class="spacer"></div>
-  <button class="btn btn-ghost hidden" id="go-admin">⚙️ Админка (товары и заявки)</button>
 </section>
 
 <!-- DETAIL -->
