@@ -6,6 +6,7 @@
 <title>Каталог</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <style>
   :root{
     --bg: var(--tg-theme-bg-color, #ffffff);
@@ -99,6 +100,10 @@
     border-radius:12px;padding:8px;margin-bottom:8px}
   .admin-item img{width:48px;height:48px;border-radius:8px;object-fit:cover;flex:none;background:#0001}
   .admin-item .meta{flex:1;min-width:0}
+  .admin-item .drag{flex:none;cursor:grab;color:var(--hint);font-size:18px;line-height:1;
+    padding:0 2px;touch-action:none;user-select:none}
+  .admin-item.sortable-chosen{background:var(--bg);box-shadow:0 4px 14px rgba(0,0,0,.18)}
+  .admin-item.sortable-ghost{opacity:.4}
   .tag{font-size:11px;padding:2px 7px;border-radius:6px;font-weight:600}
   .tag.on{background:#23b26d22;color:#1a9e5e}
   .tag.off{background:#e0394522;color:#e03945}
@@ -882,7 +887,9 @@ async function loadAdmin(){
   (res?.products||[]).forEach(p=>{
     const el=document.createElement("div");
     el.className="admin-item";
+    el.dataset.id = p.id;
     el.innerHTML=`
+      <span class="drag" aria-hidden="true">⠿</span>
       <img src="${p.image_url||""}" alt="" />
       <div class="meta">
         <div class="name">${escapeHtml(p.name)}</div>
@@ -891,6 +898,23 @@ async function loadAdmin(){
       <button class="btn btn-ghost btn-sm">✎</button>`;
     el.querySelector("button").onclick=()=>openAdminForm(p);
     list.appendChild(el);
+  });
+  enableSort(list, "products");
+}
+
+// drag-and-drop сортировка: сохраняем порядок и обновляем каталог
+function enableSort(listEl, type){
+  if(!window.Sortable || !listEl) return;
+  if(listEl._sortable){ try{ listEl._sortable.destroy(); }catch{} }
+  listEl._sortable = Sortable.create(listEl, {
+    handle: ".drag",
+    animation: 150,
+    onEnd: async ()=>{
+      const ids = [...listEl.children].map(el=>el.dataset.id).filter(Boolean);
+      tg?.HapticFeedback?.impactOccurred?.("light");
+      await api("/admin/reorder","POST",{ type, ids });
+      loadCatalog(); // чтобы новый порядок применился на витрине
+    },
   });
 }
 
@@ -931,7 +955,9 @@ async function loadCategoriesAdmin(){
   CATEGORIES.forEach(c=>{
     const el=document.createElement("div");
     el.className="admin-item";
+    el.dataset.id = c.id;
     el.innerHTML=`
+      <span class="drag" aria-hidden="true">⠿</span>
       <img src="${c.image_url||""}" alt="" style="border-radius:50%" />
       <div class="meta"><div class="name">${escapeHtml(c.name)}</div></div>
       <button class="btn btn-ghost btn-sm" data-act="edit">✎</button>
@@ -940,6 +966,7 @@ async function loadCategoriesAdmin(){
     el.querySelector('[data-act="del"]').onclick =()=>deleteCategory(c);
     list.appendChild(el);
   });
+  enableSort(list, "categories");
 }
 
 function openCatForm(c){

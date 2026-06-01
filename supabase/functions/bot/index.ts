@@ -459,6 +459,26 @@ Deno.serve(async (req) => {
       }
     }
 
+    // -------- 4d. Админ: порядок (drag-and-drop) --------
+    if (path === "/admin/reorder") {
+      const u = await getInitUser(req);
+      if (!u || !isAdmin(u.id)) return json({ error: "forbidden" }, 403);
+      if (req.method === "POST") {
+        const body = await req.json();
+        const tables: Record<string, string> = {
+          products: "products", categories: "categories",
+          subcategories: "subcategories", announcements: "announcements",
+        };
+        const table = tables[body.type];
+        const ids: string[] = Array.isArray(body.ids) ? body.ids : [];
+        if (!table || !ids.length) return json({ error: "bad params" }, 400);
+        for (let i = 0; i < ids.length; i++) {
+          await supabase.from(table).update({ sort_order: i }).eq("id", ids[i]);
+        }
+        return json({ ok: true });
+      }
+    }
+
     // -------- 5. Админ: заявки --------
     if (path === "/admin/requests") {
       const u = await getInitUser(req);
