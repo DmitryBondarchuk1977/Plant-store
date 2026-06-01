@@ -238,6 +238,21 @@
   .out-badge{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.62);color:#fff;
     font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;text-transform:lowercase}
   .out-note{font-size:12px;color:#e03945;font-weight:700}
+  /* лайтбокс */
+  .lb{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:100;opacity:0;transition:opacity .2s}
+  .lb.show{opacity:1}
+  .lb-track{display:flex;width:100%;height:100%;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .lb-track::-webkit-scrollbar{display:none}
+  .lb-slide{flex:none;width:100vw;height:100%;display:flex;align-items:center;justify-content:center;
+    padding:20px;scroll-snap-align:center}
+  .lb-slide img{max-width:100%;max-height:100%;object-fit:contain}
+  .lb-close{position:absolute;top:12px;right:14px;z-index:2;width:40px;height:40px;border-radius:50%;
+    border:none;background:rgba(255,255,255,.16);color:#fff;font-size:20px;cursor:pointer}
+  .lb-counter{position:absolute;top:20px;left:0;right:0;text-align:center;color:#fff;font-size:14px;font-weight:600;z-index:1}
+  .lb-nav{display:none;background:rgba(255,255,255,.16);color:#fff;box-shadow:none}
+  @media (hover:hover) and (pointer:fine){ .lb .lb-nav{display:flex} }
+  /* фото на детальном — кликабельны */
+  .detail-img-wrap{cursor:zoom-in}
   .cat-tag{display:inline-block;font-size:11px;color:var(--hint);margin-top:4px}
   .form-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .form-gallery .fg-item{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;
@@ -433,6 +448,15 @@
   </div>
 </div>
 
+<!-- LIGHTBOX (полноэкранный просмотр фото) -->
+<div id="lightbox" class="lb hidden">
+  <div class="lb-counter" id="lb-counter"></div>
+  <button class="lb-close" id="lb-close" aria-label="Закрыть">✕</button>
+  <div class="lb-track" id="lb-track"></div>
+  <button class="gnav prev lb-nav" id="lb-prev" aria-label="Назад">‹</button>
+  <button class="gnav next lb-nav" id="lb-next" aria-label="Вперёд">›</button>
+</div>
+
 <script>
 // ============ КОНФИГ — заполни своими значениями ============
 const CONFIG = {
@@ -492,6 +516,7 @@ function updateChrome(){
 function mainBtn(text){ tg.MainButton.setText(text); tg.MainButton.show(); tg.MainButton.enable(); }
 
 function onBack(){
+  if(lightboxOpen){ closeLightbox(); return; }
   if(view==="detail") show(detailReturn);
   else if(view==="cart") show("catalog");
   else if(view==="checkout") show("cart");
@@ -752,19 +777,53 @@ function openItemDetail(item){
   detailReturn = "admin";
   showProductDetail(p, false);
 }
+let DETAIL_IMAGES = [];
 function renderDetailImages(p){
   const imgs = (p.images && p.images.length) ? p.images : (p.image_url ? [p.image_url] : []);
+  DETAIL_IMAGES = imgs;
   const g = $("d-gallery"); g.innerHTML = "";
-  if(!imgs.length){ g.innerHTML = `<div class="detail-img-wrap"></div>`; }
-  else imgs.forEach(src=>{
+  if(!imgs.length){ g.innerHTML = `<div class="detail-img-wrap" style="cursor:default"></div>`; }
+  else imgs.forEach((src, i)=>{
     const w = document.createElement("div");
     w.className = "detail-img-wrap";
     w.innerHTML = `<img src="${src}" alt="">`;
+    w.onclick = ()=> openLightbox(i);
     g.appendChild(w);
   });
   g.scrollLeft = 0;
   wireCarousel(g.closest(".gallery-wrap"), g, imgs.length, $("d-dots"));
 }
+
+// ---------- Лайтбокс (полноэкранный просмотр) ----------
+let lightboxOpen = false;
+function openLightbox(startIdx){
+  if(!DETAIL_IMAGES.length) return;
+  const track = $("lb-track");
+  track.innerHTML = DETAIL_IMAGES.map(src=>`<div class="lb-slide"><img src="${src}" alt=""></div>`).join("");
+  const updCounter = ()=>{
+    const idx = Math.round(track.scrollLeft/track.clientWidth);
+    $("lb-counter").textContent = DETAIL_IMAGES.length>1 ? `${idx+1} / ${DETAIL_IMAGES.length}` : "";
+  };
+  track.onscroll = updCounter;
+  const box = $("lightbox");
+  box.classList.remove("hidden");
+  lightboxOpen = true;
+  requestAnimationFrame(()=>{
+    box.classList.add("show");
+    track.scrollLeft = startIdx * track.clientWidth;
+    updCounter();
+  });
+}
+function closeLightbox(){
+  const box = $("lightbox");
+  box.classList.remove("show");
+  lightboxOpen = false;
+  setTimeout(()=> box.classList.add("hidden"), 200);
+}
+$("lb-close").onclick = closeLightbox;
+$("lightbox").addEventListener("click", (e)=>{ if(e.target.id==="lightbox" || e.target.classList.contains("lb-slide")) closeLightbox(); });
+$("lb-prev").onclick = ()=> $("lb-track").scrollBy({left:-$("lb-track").clientWidth, behavior:"smooth"});
+$("lb-next").onclick = ()=> $("lb-track").scrollBy({left: $("lb-track").clientWidth, behavior:"smooth"});
 function showProductDetail(p, showAdd){
   currentProductId = p.id;
   renderDetailImages(p);
