@@ -22,6 +22,15 @@ create table if not exists public.announcements (
   created_at  timestamptz not null default now()
 );
 
+-- ---------- Подкатегории ----------
+create table if not exists public.subcategories (
+  id          uuid primary key default gen_random_uuid(),
+  category_id uuid not null references public.categories(id) on delete cascade,
+  name        text not null,
+  sort_order  int not null default 0,
+  created_at  timestamptz not null default now()
+);
+
 -- ---------- Товары каталога ----------
 create table if not exists public.products (
   id          uuid primary key default gen_random_uuid(),
@@ -31,6 +40,7 @@ create table if not exists public.products (
   image_url   text,
   images      text[] not null default '{}',
   category_id uuid references public.categories(id) on delete set null,
+  subcategory_id uuid references public.subcategories(id) on delete set null,
   is_active   boolean not null default true,   -- модерация: показывать в каталоге или нет
   sort_order  int not null default 0,
   created_at  timestamptz not null default now()
@@ -79,6 +89,7 @@ create index if not exists idx_products_category on public.products(category_id)
 -- ============================================================
 alter table public.products      enable row level security;
 alter table public.categories    enable row level security;
+alter table public.subcategories enable row level security;
 alter table public.announcements enable row level security;
 alter table public.app_users     enable row level security;
 alter table public.requests      enable row level security;
@@ -94,6 +105,12 @@ create policy "public read active products"
 drop policy if exists "public read categories" on public.categories;
 create policy "public read categories"
   on public.categories for select
+  using (true);
+
+-- Подкатегории: публичное чтение.
+drop policy if exists "public read subcategories" on public.subcategories;
+create policy "public read subcategories"
+  on public.subcategories for select
   using (true);
 
 -- Анонсы: публичное чтение активных.
