@@ -184,6 +184,21 @@
   .ann .cap.light{color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.6))}
   .ann .cap.dark{color:#14202a;background:linear-gradient(transparent,rgba(255,255,255,.75))}
 
+  /* ---- стрелки каруселей (только десктоп) и точки ---- */
+  .carousel-wrap,.gallery-wrap{position:relative}
+  .gnav{display:none;position:absolute;top:50%;transform:translateY(-50%);z-index:3;
+    width:36px;height:36px;border-radius:50%;border:none;cursor:pointer;
+    background:rgba(255,255,255,.92);box-shadow:0 2px 8px rgba(0,0,0,.18);
+    align-items:center;justify-content:center;font-size:22px;color:#222;line-height:1}
+  .gnav.prev{left:6px}
+  .gnav.next{right:6px}
+  .dots{display:flex;justify-content:center;gap:6px;margin-top:8px}
+  .dots .dot{width:7px;height:7px;border-radius:50%;background:var(--hint);opacity:.4}
+  .dots .dot.on{opacity:1;background:var(--btn)}
+  @media (hover:hover) and (pointer:fine){
+    .carousel-wrap.multi .gnav,.gallery-wrap.multi .gnav{display:flex}
+  }
+
   /* ---- card add button ---- */
   .card-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:6px}
   .add-btn{flex:none;width:34px;height:34px;border-radius:50%;border:none;cursor:pointer;
@@ -227,7 +242,11 @@
 
   <div id="ann-section" class="hidden">
     <h2 class="sect-title">Скоро в продаже</h2>
-    <div id="ann-carousel" class="carousel"></div>
+    <div class="carousel-wrap" id="ann-wrap">
+      <div id="ann-carousel" class="carousel"></div>
+      <button class="gnav prev" id="ann-prev" aria-label="Назад">‹</button>
+      <button class="gnav next" id="ann-next" aria-label="Вперёд">›</button>
+    </div>
   </div>
 
   <h2 class="sect-title" id="catalog-heading">Каталог</h2>
@@ -238,7 +257,12 @@
 
 <!-- DETAIL -->
 <section id="view-detail" class="hidden detail">
-  <div id="d-gallery" class="detail-gallery"></div>
+  <div class="gallery-wrap">
+    <div id="d-gallery" class="detail-gallery"></div>
+    <button class="gnav prev" id="d-prev" aria-label="Назад">‹</button>
+    <button class="gnav next" id="d-next" aria-label="Вперёд">›</button>
+    <div id="d-dots" class="dots"></div>
+  </div>
   <h2 id="d-name"></h2>
   <div id="d-cat" class="cat-tag hidden"></div>
   <div id="d-price" class="price" style="font-size:20px"></div>
@@ -480,6 +504,24 @@ function renderCategories(){
 }
 
 // ---------- Announcements (карусель) ----------
+function wireCarousel(wrapEl, scroller, count, dotsEl){
+  if(!wrapEl) return;
+  wrapEl.classList.toggle("multi", count>1);
+  const prev = wrapEl.querySelector(".gnav.prev");
+  const next = wrapEl.querySelector(".gnav.next");
+  if(prev) prev.onclick = ()=> scroller.scrollBy({left:-scroller.clientWidth*0.9, behavior:"smooth"});
+  if(next) next.onclick = ()=> scroller.scrollBy({left: scroller.clientWidth*0.9, behavior:"smooth"});
+  if(dotsEl){
+    dotsEl.innerHTML="";
+    if(count>1){
+      for(let i=0;i<count;i++){ const d=document.createElement("span"); d.className="dot"+(i===0?" on":""); dotsEl.appendChild(d); }
+      scroller.onscroll = ()=>{
+        const idx=Math.round(scroller.scrollLeft/scroller.clientWidth);
+        [...dotsEl.children].forEach((d,i)=>d.classList.toggle("on", i===idx));
+      };
+    }
+  }
+}
 function renderAnnouncements(){
   const sec = $("ann-section"), box = $("ann-carousel");
   box.innerHTML="";
@@ -498,6 +540,7 @@ function renderAnnouncements(){
       });
     }
   });
+  wireCarousel($("ann-wrap"), $("ann-carousel"), ANNOUNCEMENTS.length, null);
 }
 function pickTextColor(url, cb){
   const img = new Image();
@@ -593,13 +636,15 @@ function openItemDetail(item){
 function renderDetailImages(p){
   const imgs = (p.images && p.images.length) ? p.images : (p.image_url ? [p.image_url] : []);
   const g = $("d-gallery"); g.innerHTML = "";
-  if(!imgs.length){ g.innerHTML = `<div class="detail-img-wrap"></div>`; return; }
-  imgs.forEach(src=>{
+  if(!imgs.length){ g.innerHTML = `<div class="detail-img-wrap"></div>`; }
+  else imgs.forEach(src=>{
     const w = document.createElement("div");
     w.className = "detail-img-wrap";
     w.innerHTML = `<img src="${src}" alt="">`;
     g.appendChild(w);
   });
+  g.scrollLeft = 0;
+  wireCarousel(g.closest(".gallery-wrap"), g, imgs.length, $("d-dots"));
 }
 function showProductDetail(p, showAdd){
   currentProductId = p.id;
