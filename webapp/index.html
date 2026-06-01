@@ -228,6 +228,11 @@
     background:var(--btn);color:var(--btn-text);font-size:20px;line-height:1;
     display:flex;align-items:center;justify-content:center}
   .add-btn.in{background:#1a9e5e;color:#fff}
+  .card.out{opacity:.72}
+  .card.out .thumb img{filter:grayscale(.55)}
+  .out-badge{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.62);color:#fff;
+    font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;text-transform:lowercase}
+  .out-note{font-size:12px;color:#e03945;font-weight:700}
   .cat-tag{display:inline-block;font-size:11px;color:var(--hint);margin-top:4px}
   .form-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .form-gallery .fg-item{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;
@@ -295,6 +300,7 @@
   <div id="d-price" class="price" style="font-size:20px"></div>
   <div id="d-desc" class="desc"></div>
   <div class="spacer"></div>
+  <div id="d-out" class="out-note hidden" style="text-align:center;padding:14px 0">Нет в наличии</div>
   <button class="btn btn-primary" id="d-add">В заявку</button>
 </section>
 
@@ -345,6 +351,7 @@
     <div id="announcements-list"></div>
     <p id="announcements-empty" class="hint center hidden" style="margin-top:24px">Анонсов пока нет.</p>
   </div>
+  <div id="req-filter" class="subchips hidden" style="margin-bottom:12px"></div>
   <div id="requests-list" class="hidden"></div>
   <p id="requests-empty" class="hint center hidden" style="margin-top:40px">Заявок пока нет.</p>
 </section>
@@ -362,6 +369,8 @@
   <select id="af-subcategory" class="hidden"></select>
   <label>Цена, ₽</label>
   <input id="af-price" type="number" inputmode="decimal" />
+  <label>Остаток (пусто — не ограничен, 0 — нет в наличии)</label>
+  <input id="af-stock" type="number" inputmode="numeric" placeholder="не ограничен" />
   <label>Фото (можно несколько, первое — обложка)</label>
   <input id="af-file" type="file" accept="image/*" multiple />
   <div id="af-gallery" class="form-gallery"></div>
@@ -529,11 +538,22 @@ async function loadCatalog(){
   CATEGORIES = cRes.error ? [] : (cRes.data||[]);
   SUBCATEGORIES = sRes.error ? [] : (sRes.data||[]);
   ANNOUNCEMENTS = aRes.error ? [] : (aRes.data||[]);
+  cleanCart();
   renderCategories();
   renderSubChips();
   renderAnnouncements();
   renderCatalog();
   renderBadge();
+}
+// Убираем из корзины товары, которых больше нет в каталоге или нет в наличии
+// (для тех, кто не успел оформить заявку).
+function cleanCart(){
+  let changed=false;
+  Object.keys(CART).forEach(id=>{
+    const p = PRODUCTS.find(x=>x.id===id);
+    if(!p || isOut(p)){ delete CART[id]; changed=true; }
+  });
+  if(changed){ try{ localStorage.setItem("cart", JSON.stringify(CART)); }catch{} }
 }
 function catName(id){ return CATEGORIES.find(c=>c.id===id)?.name || ""; }
 
@@ -658,12 +678,15 @@ function refreshAddButtons(){
   document.querySelectorAll(".add-btn[data-id]").forEach(b=> setAddBtn(b, b.dataset.id));
 }
 
+function isOut(p){ return p && p.stock!==null && p.stock!==undefined && Number(p.stock)<=0; }
 function sortProducts(list){
   const arr = list.slice();
   if(sortMode==="price_asc") arr.sort((a,b)=> Number(a.price)-Number(b.price));
   else if(sortMode==="price_desc") arr.sort((a,b)=> Number(b.price)-Number(a.price));
   else if(sortMode==="new") arr.sort((a,b)=> new Date(b.created_at)-new Date(a.created_at));
-  return arr; // default → порядок как из БД (sort_order)
+  // «нет в наличии» — вниз списка (стабильная сортировка сохраняет порядок внутри групп)
+  arr.sort((a,b)=> (isOut(a)?1:0)-(isOut(b)?1:0));
+  return arr;
 }
 function updateSortBtn(){
   $("open-sort").classList.toggle("active", sortMode!=="default");
@@ -675,26 +698,29 @@ function renderCatalog(){
   $("catalog-empty").classList.toggle("hidden", PRODUCTS.length>0);
   $("catalog-nofound").classList.toggle("hidden", !(PRODUCTS.length>0 && list.length===0));
   list.forEach(p=>{
+    const out = isOut(p);
     const el = document.createElement("div");
-    el.className="card";
+    el.className="card"+(out?" out":"");
     el.innerHTML = `
-      <div class="thumb">${p.image_url?`<img src="${p.image_url}" alt="">`:""}</div>
+      <div class="thumb">${p.image_url?`<img src="${p.image_url}" alt="">`:""}${out?'<div class="out-badge">нет в наличии</div>':''}</div>
       <div class="body">
         <div class="name">${escapeHtml(p.name)}</div>
         <div class="card-bottom">
           <div class="price">${fmt(p.price)}</div>
-          <button class="add-btn" data-id="${p.id}" aria-label="В заявку">+</button>
+          ${out ? '' : `<button class="add-btn" data-id="${p.id}" aria-label="В заявку">+</button>`}
         </div>
       </div>`;
     el.onclick = ()=> openDetail(p.id);
     const add = el.querySelector(".add-btn");
-    setAddBtn(add, p.id);
-    add.onclick = (e)=>{
-      e.stopPropagation();
-      if(CART[p.id]>0) delete CART[p.id]; else CART[p.id]=1;
-      saveCart(); setAddBtn(add, p.id);
-      tg?.HapticFeedback?.impactOccurred?.("light");
-    };
+    if(add){
+      setAddBtn(add, p.id);
+      add.onclick = (e)=>{
+        e.stopPropagation();
+        if(CART[p.id]>0) delete CART[p.id]; else CART[p.id]=1;
+        saveCart(); setAddBtn(add, p.id);
+        tg?.HapticFeedback?.impactOccurred?.("light");
+      };
+    }
     grid.appendChild(el);
   });
 }
@@ -743,8 +769,10 @@ function showProductDetail(p, showAdd){
   $("d-cat").classList.toggle("hidden", !cat);
   $("d-price").textContent = fmt(p.price);
   $("d-desc").textContent = p.description||"";
-  $("d-add").classList.toggle("hidden", !showAdd);
-  if(showAdd) renderDetailBtn();
+  const out = isOut(p);
+  $("d-out").classList.toggle("hidden", !out);
+  $("d-add").classList.toggle("hidden", !showAdd || out);
+  if(showAdd && !out) renderDetailBtn();
   show("detail");
 }
 function renderDetailBtn(){
@@ -858,7 +886,7 @@ async function loadAdmin(){
       <img src="${p.image_url||""}" alt="" />
       <div class="meta">
         <div class="name">${escapeHtml(p.name)}</div>
-        <div class="hint">${fmt(p.price)} · <span class="tag ${p.is_active?'on':'off'}">${p.is_active?'в каталоге':'скрыт'}</span>${p.category_id?' · '+escapeHtml(catName(p.category_id)):''}</div>
+        <div class="hint">${fmt(p.price)} · <span class="tag ${p.is_active?'on':'off'}">${p.is_active?'в каталоге':'скрыт'}</span>${p.category_id?' · '+escapeHtml(catName(p.category_id)):''} · ${isOut(p)?'<span style="color:#e03945;font-weight:700">нет в наличии</span>':('остаток: '+(p.stock==null?'∞':p.stock))}</div>
       </div>
       <button class="btn btn-ghost btn-sm">✎</button>`;
     el.querySelector("button").onclick=()=>openAdminForm(p);
@@ -887,6 +915,7 @@ function switchAdminTab(tab){
   $("categories-wrap").classList.toggle("hidden", tab!=="categories");
   $("announcements-wrap").classList.toggle("hidden", tab!=="announcements");
   $("requests-list").classList.toggle("hidden", tab!=="requests");
+  $("req-filter").classList.toggle("hidden", tab!=="requests");
   $("requests-empty").classList.add("hidden");
   if(tab==="categories") loadCategoriesAdmin();
   if(tab==="announcements") loadAnnouncementsAdmin();
@@ -1063,13 +1092,40 @@ const STATUSES = [
   { key:"new",         label:"Новая" },
   { key:"in_progress", label:"В работе" },
   { key:"done",        label:"Выполнена" },
+  { key:"canceled",    label:"Отмена" },
 ];
 const STATUS_LABEL = { new:"Новая", in_progress:"В работе", done:"Выполнена", canceled:"Отменена" };
+const REQ_FILTERS = [
+  { key:"all",         label:"Все" },
+  { key:"new",         label:"Новые" },
+  { key:"in_progress", label:"В работе" },
+  { key:"done",        label:"Выполнены" },
+  { key:"canceled",    label:"Отменённые" },
+];
+let ALL_REQUESTS = [];
+let reqFilter = "all";
 
 async function loadRequests(){
   const res = await api("/admin/requests","GET");
+  ALL_REQUESTS = res?.requests || [];
+  renderReqFilter();
+  renderReqList();
+}
+function renderReqFilter(){
+  const box = $("req-filter");
+  box.classList.remove("hidden");
+  box.innerHTML="";
+  REQ_FILTERS.forEach(f=>{
+    const b=document.createElement("button");
+    b.className="subchip"+(reqFilter===f.key?" on":"");
+    b.textContent=f.label;
+    b.onclick=()=>{ reqFilter=f.key; renderReqFilter(); renderReqList(); };
+    box.appendChild(b);
+  });
+}
+function renderReqList(){
   const list = $("requests-list"); list.innerHTML="";
-  const reqs = res?.requests || [];
+  const reqs = reqFilter==="all" ? ALL_REQUESTS : ALL_REQUESTS.filter(r=>r.status===reqFilter);
   $("requests-empty").classList.toggle("hidden", reqs.length>0);
   reqs.forEach(r=> list.appendChild(renderRequest(r)));
 }
@@ -1121,11 +1177,19 @@ function renderRequest(r){
 
 async function setStatus(r, status, el){
   if(r.status===status) return;
+  if(status==="canceled"){
+    const ok = await new Promise(res=> tg?.showConfirm ? tg.showConfirm(`Отменить заявку #${r.id}?`, res) : res(confirm("Отменить заявку?")));
+    if(!ok) return;
+  }
   const res = await api("/admin/requests","PATCH",{ id:r.id, status });
   if(res?.request){
     r.status = status;
+    const idx = ALL_REQUESTS.findIndex(x=>x.id===r.id);
+    if(idx>=0) ALL_REQUESTS[idx].status = status;
     tg?.HapticFeedback?.impactOccurred?.("light");
-    el.replaceWith(renderRequest(r));
+    // если активен фильтр и заявка из него выпала — перерисуем список, иначе саму карточку
+    if(reqFilter!=="all" && reqFilter!==status) renderReqList();
+    else el.replaceWith(renderRequest(r));
   } else {
     tg?.showAlert?.("Не удалось изменить статус: "+(res?.error||""));
   }
@@ -1137,6 +1201,7 @@ function openAdminForm(p){
   $("af-name").value = p?.name||"";
   $("af-desc").value = p?.description||"";
   $("af-price").value = p?.price||"";
+  $("af-stock").value = (p && p.stock!=null) ? p.stock : "";
   $("af-active").checked = p ? !!p.is_active : true;
   const sel = $("af-category");
   sel.innerHTML = '<option value="">— без категории —</option>' +
@@ -1190,6 +1255,7 @@ async function saveProduct(){
   const payload={
     name, description:$("af-desc").value.trim(),
     price:Number($("af-price").value)||0, is_active:$("af-active").checked,
+    stock: $("af-stock").value==="" ? null : Number($("af-stock").value),
     category_id: $("af-category").value || null,
     subcategory_id: $("af-subcategory").value || null,
     images: productImages.filter(x=>x.url).map(x=>x.url),       // оставленные

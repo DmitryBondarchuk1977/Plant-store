@@ -42,6 +42,7 @@ create table if not exists public.products (
   category_id uuid references public.categories(id) on delete set null,
   subcategory_id uuid references public.subcategories(id) on delete set null,
   is_active   boolean not null default true,   -- модерация: показывать в каталоге или нет
+  stock       int,                              -- NULL = не ограничен, 0 = нет в наличии, N = остаток
   sort_order  int not null default 0,
   created_at  timestamptz not null default now()
 );

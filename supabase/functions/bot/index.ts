@@ -276,6 +276,8 @@ Deno.serve(async (req) => {
           sort_order: Number(body.sort_order) || 0,
           category_id: body.category_id || null,
           subcategory_id: body.subcategory_id || null,
+          stock: (body.stock === null || body.stock === "" || body.stock === undefined)
+            ? null : Number(body.stock),
         };
 
         // Картинки: оставляем переданные URL + грузим новые из base64.
@@ -482,6 +484,18 @@ Deno.serve(async (req) => {
           .from("requests").update({ status: body.status })
           .eq("id", body.id).select().single();
         if (error) return json({ error: error.message }, 500);
+
+        // Уведомление клиенту о смене статуса
+        if (data?.telegram_id) {
+          const labels: Record<string, string> = {
+            new: "принята ✅",
+            in_progress: "в работе 🛠",
+            done: "выполнена 🎉",
+            canceled: "отменена ❌",
+          };
+          const txt = `Ваша заявка #${data.id} — ${labels[body.status] || body.status}.`;
+          try { await tg("sendMessage", { chat_id: data.telegram_id, text: txt }); } catch (_e) { /* клиент мог не писать боту */ }
+        }
         return json({ request: data });
       }
     }
