@@ -175,6 +175,7 @@
   .cat-head{display:flex;align-items:center;justify-content:space-between}
   .sort-btn{flex:none;border:none;background:var(--card);color:var(--text);border-radius:14px;
     width:36px;height:36px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .sort-btn.active{background:var(--btn);color:var(--btn-text)}
   /* нижнее диалоговое окно сортировки */
   .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;
     display:flex;align-items:flex-end;opacity:0;transition:opacity .2s}
@@ -414,6 +415,7 @@
     <label class="sheet-opt"><span>Сначала дешевле</span><input type="radio" name="sort" value="price_asc"></label>
     <label class="sheet-opt"><span>Сначала дороже</span><input type="radio" name="sort" value="price_desc"></label>
     <label class="sheet-opt"><span>Новые</span><input type="radio" name="sort" value="new"></label>
+    <button class="btn btn-ghost" id="sort-reset" style="margin-top:8px">Сбросить</button>
   </div>
 </div>
 
@@ -436,7 +438,7 @@ let CATEGORIES = [];         // категории
 let SUBCATEGORIES = [];      // подкатегории
 let selectedCat = null;      // id выбранной категории (null = все)
 let selectedSub = null;      // id выбранной подкатегории (null = все)
-let sortMode = "new";        // new | price_asc | price_desc
+let sortMode = "default";    // default (порядок из БД) | price_asc | price_desc | new
 let searchText = "";
 let CART = loadCart();       // { productId: qty }
 let ME = { is_admin:false, first_name:"", last_name:"", phone:"" };
@@ -660,10 +662,14 @@ function sortProducts(list){
   const arr = list.slice();
   if(sortMode==="price_asc") arr.sort((a,b)=> Number(a.price)-Number(b.price));
   else if(sortMode==="price_desc") arr.sort((a,b)=> Number(b.price)-Number(a.price));
-  else arr.sort((a,b)=> new Date(b.created_at)-new Date(a.created_at)); // new
-  return arr;
+  else if(sortMode==="new") arr.sort((a,b)=> new Date(b.created_at)-new Date(a.created_at));
+  return arr; // default → порядок как из БД (sort_order)
+}
+function updateSortBtn(){
+  $("open-sort").classList.toggle("active", sortMode!=="default");
 }
 function renderCatalog(){
+  updateSortBtn();
   const grid = $("catalog-grid"); grid.innerHTML="";
   const list = sortProducts(filteredProducts());
   $("catalog-empty").classList.toggle("hidden", PRODUCTS.length>0);
@@ -1264,6 +1270,12 @@ document.querySelectorAll('#sort-sheet input[name="sort"]').forEach(r=>{
     closeSortSheet();
   });
 });
+$("sort-reset").onclick = ()=>{
+  sortMode = "default";
+  document.querySelectorAll('#sort-sheet input[name="sort"]').forEach(r=> r.checked=false);
+  renderCatalog();
+  closeSortSheet();
+};
 
 // ---------- init ----------
 (async function init(){
