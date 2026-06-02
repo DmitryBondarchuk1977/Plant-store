@@ -291,6 +291,10 @@
   .order .sum{font-weight:700;margin-top:8px}
   .order .pay-row{margin-top:10px}
   .order .paid{color:#1a9e5e;font-weight:700;font-size:14px}
+  .head .tags{display:flex;gap:6px;align-items:center;flex:none}
+  .pay-tag{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:700;white-space:nowrap}
+  .pay-tag.pp{background:#23b26d22;color:#1a9e5e}
+  .pay-tag.pn{background:#c98a0022;color:#c98a00}
   .cat-tag{display:inline-block;font-size:11px;color:var(--hint);margin-top:4px}
   .form-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .form-gallery .fg-item{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;
@@ -443,7 +447,8 @@
     <button class="btn btn-primary" id="set-save" style="margin-top:14px">Сохранить</button>
     <p class="hint" style="margin-top:10px">Изменения применяются к новым сообщениям /start.</p>
   </div>
-  <div id="req-filter" class="subchips hidden" style="margin-bottom:12px"></div>
+  <div id="req-filter" class="subchips hidden" style="margin-bottom:8px"></div>
+  <div id="req-pay-filter" class="subchips hidden" style="margin-bottom:12px"></div>
   <div id="requests-list" class="hidden"></div>
   <p id="requests-empty" class="hint center hidden" style="margin-top:40px">Заявок пока нет.</p>
 </section>
@@ -960,7 +965,10 @@ function renderMyOrder(r){
   el.innerHTML=`
     <div class="head">
       <span class="id">Заявка #${r.id}</span>
-      <span class="status-tag st-${r.status}">${STATUS_LABEL[r.status]||r.status}</span>
+      <span class="tags">
+        ${Number(r.total)>0 ? `<span class="pay-tag ${r.is_paid?'pp':'pn'}">${r.is_paid?'Оплачено':'Не оплачено'}</span>` : ''}
+        <span class="status-tag st-${r.status}">${STATUS_LABEL[r.status]||r.status}</span>
+      </span>
     </div>
     <div class="date">${date}</div>
     <div class="req-items"></div>
@@ -1253,6 +1261,7 @@ function switchAdminTab(tab){
   $("settings-wrap").classList.toggle("hidden", tab!=="settings");
   $("requests-list").classList.toggle("hidden", tab!=="requests");
   $("req-filter").classList.toggle("hidden", tab!=="requests");
+  $("req-pay-filter").classList.toggle("hidden", tab!=="requests");
   $("requests-empty").classList.add("hidden");
   if(tab==="categories") loadCategoriesAdmin();
   if(tab==="announcements") loadAnnouncementsAdmin();
@@ -1455,13 +1464,20 @@ const REQ_FILTERS = [
   { key:"done",        label:"Выполнены" },
   { key:"canceled",    label:"Отменённые" },
 ];
+const REQ_PAY_FILTERS = [
+  { key:"all",    label:"Все" },
+  { key:"paid",   label:"Оплаченные" },
+  { key:"unpaid", label:"Неоплаченные" },
+];
 let ALL_REQUESTS = [];
 let reqFilter = "all";
+let reqPayFilter = "all";
 
 async function loadRequests(){
   const res = await api("/admin/requests","GET");
   ALL_REQUESTS = res?.requests || [];
   renderReqFilter();
+  renderReqPayFilter();
   renderReqList();
 }
 function renderReqFilter(){
@@ -1476,9 +1492,28 @@ function renderReqFilter(){
     box.appendChild(b);
   });
 }
+function renderReqPayFilter(){
+  const box = $("req-pay-filter");
+  box.classList.remove("hidden");
+  box.innerHTML="";
+  REQ_PAY_FILTERS.forEach(f=>{
+    const b=document.createElement("button");
+    b.className="subchip"+(reqPayFilter===f.key?" on":"");
+    b.textContent=f.label;
+    b.onclick=()=>{ reqPayFilter=f.key; renderReqPayFilter(); renderReqList(); };
+    box.appendChild(b);
+  });
+}
+function matchesPay(r){
+  if(reqPayFilter==="paid")   return !!r.is_paid;
+  if(reqPayFilter==="unpaid") return !r.is_paid && Number(r.total)>0;
+  return true;
+}
 function renderReqList(){
   const list = $("requests-list"); list.innerHTML="";
-  const reqs = reqFilter==="all" ? ALL_REQUESTS : ALL_REQUESTS.filter(r=>r.status===reqFilter);
+  const reqs = ALL_REQUESTS.filter(r=>
+    (reqFilter==="all" || r.status===reqFilter) && matchesPay(r)
+  );
   $("requests-empty").classList.toggle("hidden", reqs.length>0);
   reqs.forEach(r=> list.appendChild(renderRequest(r)));
 }
@@ -1492,9 +1527,12 @@ function renderRequest(r){
   el.innerHTML = `
     <div class="head">
       <span class="id">Заявка #${r.id}</span>
-      <span class="status-tag st-${r.status}">${STATUS_LABEL[r.status]||r.status}</span>
+      <span class="tags">
+        ${Number(r.total)>0 ? `<span class="pay-tag ${r.is_paid?'pp':'pn'}">${r.is_paid?'Оплачено':'Не оплачено'}</span>` : ''}
+        <span class="status-tag st-${r.status}">${STATUS_LABEL[r.status]||r.status}</span>
+      </span>
     </div>
-    <div class="date">${date}${r.is_paid ? ' · <span style="color:#1a9e5e;font-weight:700">оплачено</span>' : (Number(r.total)>0 ? ' · <span style="color:#c98a00;font-weight:700">не оплачено</span>' : '')}</div>
+    <div class="date">${date}</div>
     <div class="who">${name}</div>
     <div class="contact">${phone ? `<a href="tel:${phone}">📞 ${escapeHtml(phone)}</a>` : '<span class="hint">телефон не указан</span>'}</div>
     ${r.comment ? `<div class="cmt">💬 ${escapeHtml(r.comment)}</div>` : ""}
