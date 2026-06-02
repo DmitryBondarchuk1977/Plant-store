@@ -112,8 +112,9 @@
   .spacer{height:14px}
 
   /* ---- admin tabs ---- */
-  .tabs{display:flex;gap:8px;margin-bottom:14px}
-  .tabs button{flex:1;border:none;border-radius:10px;padding:9px;font-size:14px;font-weight:600;
+  .tabs{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{flex:1 0 auto;white-space:nowrap;border:none;border-radius:10px;padding:9px 12px;font-size:14px;font-weight:600;
     background:var(--card);color:var(--text);cursor:pointer}
   .tabs button.active{background:var(--btn);color:var(--btn-text)}
 
@@ -421,6 +422,7 @@
     <button id="tab-categories" onclick="switchAdminTab('categories')">Категории</button>
     <button id="tab-announcements" onclick="switchAdminTab('announcements')">Анонс</button>
     <button id="tab-requests" onclick="switchAdminTab('requests')">Заявки</button>
+    <button id="tab-settings" onclick="switchAdminTab('settings')">Бот</button>
   </div>
   <div id="admin-list"></div>
   <div id="categories-wrap" class="hidden">
@@ -430,6 +432,14 @@
   <div id="announcements-wrap" class="hidden">
     <div id="announcements-list"></div>
     <p id="announcements-empty" class="hint center hidden" style="margin-top:24px">Анонсов пока нет.</p>
+  </div>
+  <div id="settings-wrap" class="hidden">
+    <label>Приветствие при /start</label>
+    <textarea id="set-start-msg" rows="3" placeholder="👋 Это каталог. Нажмите «Открыть каталог»…"></textarea>
+    <label>Текст кнопки открытия каталога</label>
+    <input id="set-start-btn" type="text" placeholder="🛍 Открыть каталог" />
+    <button class="btn btn-primary" id="set-save" style="margin-top:14px">Сохранить</button>
+    <p class="hint" style="margin-top:10px">Изменения применяются к новым сообщениям /start.</p>
   </div>
   <div id="req-filter" class="subchips hidden" style="margin-bottom:12px"></div>
   <div id="requests-list" class="hidden"></div>
@@ -1205,19 +1215,34 @@ function switchAdminTab(tab){
   $("tab-categories").classList.toggle("active", tab==="categories");
   $("tab-announcements").classList.toggle("active", tab==="announcements");
   $("tab-requests").classList.toggle("active", tab==="requests");
+  $("tab-settings").classList.toggle("active", tab==="settings");
   $("admin-list").classList.toggle("hidden", tab!=="products");
   $("admin-add").classList.toggle("hidden", tab!=="products");
   $("admin-add-cat").classList.toggle("hidden", tab!=="categories");
   $("admin-add-ann").classList.toggle("hidden", tab!=="announcements");
   $("categories-wrap").classList.toggle("hidden", tab!=="categories");
   $("announcements-wrap").classList.toggle("hidden", tab!=="announcements");
+  $("settings-wrap").classList.toggle("hidden", tab!=="settings");
   $("requests-list").classList.toggle("hidden", tab!=="requests");
   $("req-filter").classList.toggle("hidden", tab!=="requests");
   $("requests-empty").classList.add("hidden");
   if(tab==="categories") loadCategoriesAdmin();
   if(tab==="announcements") loadAnnouncementsAdmin();
+  if(tab==="settings") loadSettings();
   if(tab==="requests") loadRequests();
 }
+async function loadSettings(){
+  const res = await api("/admin/settings","GET");
+  $("set-start-msg").value = res?.start_message || "";
+  $("set-start-btn").value = res?.start_button || "";
+}
+$("set-save").onclick = async ()=>{
+  const res = await api("/admin/settings","POST",{
+    start_message: $("set-start-msg").value.trim(),
+    start_button:  $("set-start-btn").value.trim(),
+  });
+  if(res?.ok) tg?.showAlert?.("Сохранено"); else tg?.showAlert?.("Ошибка: "+(res?.error||""));
+};
 
 // ---------- Категории (админ) ----------
 async function loadCategoriesAdmin(){

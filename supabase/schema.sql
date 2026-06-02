@@ -22,6 +22,12 @@ create table if not exists public.announcements (
   created_at  timestamptz not null default now()
 );
 
+-- ---------- Настройки бота (key-value) ----------
+create table if not exists public.settings (
+  key   text primary key,
+  value text
+);
+
 -- ---------- Подкатегории ----------
 create table if not exists public.subcategories (
   id          uuid primary key default gen_random_uuid(),
@@ -92,6 +98,7 @@ alter table public.products      enable row level security;
 alter table public.categories    enable row level security;
 alter table public.subcategories enable row level security;
 alter table public.announcements enable row level security;
+alter table public.settings      enable row level security;
 alter table public.app_users     enable row level security;
 alter table public.requests      enable row level security;
 alter table public.request_items enable row level security;

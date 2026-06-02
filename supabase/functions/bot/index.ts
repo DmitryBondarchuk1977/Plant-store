@@ -126,6 +126,11 @@ async function upsertUser(u: TgUser, phone?: string) {
   }, { onConflict: "telegram_id" });
 }
 
+async function getSetting(key: string, def: string): Promise<string> {
+  const { data } = await supabase.from("settings").select("value").eq("key", key).maybeSingle();
+  return (data && typeof data.value === "string" && data.value.length) ? data.value : def;
+}
+
 // ============================================================
 //  Роутер
 // ============================================================
@@ -154,13 +159,18 @@ Deno.serve(async (req) => {
         } else if (typeof msg.text === "string" && msg.text.startsWith("/start")) {
           await upsertUser(from);
           // Каталог — INLINE-кнопкой: только так Telegram передаёт initData.
-          // Телефон теперь спрашиваем не здесь, а в Mini App при оформлении заявки.
+          // Текст приветствия и подпись кнопки редактируются в админке (таблица settings).
+          const startMsg = await getSetting(
+            "start_message",
+            "👋 Это каталог. Нажмите «Открыть каталог», чтобы выбрать товары и оформить заявку.",
+          );
+          const startBtn = await getSetting("start_button", "🛍 Открыть каталог");
           await tg("sendMessage", {
             chat_id: chatId,
-            text: "👋 Это каталог. Нажмите «Открыть каталог», чтобы выбрать товары и оформить заявку.",
+            text: startMsg,
             reply_markup: {
               inline_keyboard: [
-                [{ text: "🛍 Открыть каталог", web_app: { url: WEBAPP_URL } }],
+                [{ text: startBtn, web_app: { url: WEBAPP_URL } }],
               ],
             },
           });
@@ -489,6 +499,33 @@ Deno.serve(async (req) => {
         for (let i = 0; i < ids.length; i++) {
           await supabase.from(table).update({ sort_order: i }).eq("id", ids[i]);
         }
+        return json({ ok: true });
+      }
+    }
+
+    // -------- 4e. Админ: настройки бота --------
+    if (path === "/admin/settings") {
+      const u = await getInitUser(req);
+      if (!u || !isAdmin(u.id)) return json({ error: "forbidden" }, 403);
+
+      if (req.method === "GET") {
+        const { data } = await supabase.from("settings").select("key, value");
+        const map: Record<string, string> = {};
+        for (const row of (data ?? [])) map[row.key] = row.value;
+        return json({
+          start_message: map["start_message"] ?? "",
+          start_button:  map["start_button"]  ?? "",
+        });
+      }
+
+      if (req.method === "POST") {
+        const body = await req.json();
+        const rows = [
+          { key: "start_message", value: (body.start_message ?? "").toString() },
+          { key: "start_button",  value: (body.start_button  ?? "").toString() },
+        ];
+        const { error } = await supabase.from("settings").upsert(rows, { onConflict: "key" });
+        if (error) return json({ error: error.message }, 500);
         return json({ ok: true });
       }
     }
