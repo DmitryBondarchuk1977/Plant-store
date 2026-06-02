@@ -362,9 +362,27 @@ Deno.serve(async (req) => {
       if (!pay || !pay.url) return json({ error: "payment create failed" }, 502);
 
       await supabase.from("requests")
-        .update({ payment_id: pay.id, payment_status: pay.status || "pending" })
+        .update({ payment_id: pay.id, payment_status: pay.status || "pending", payment_method: "online" })
         .eq("id", r.id);
       return json({ confirmation_url: pay.url });
+    }
+
+    // -------- 3c2. Способ оплаты без онлайн-платежа (наличные / перевод) --------
+    if (path === "/method" && req.method === "POST") {
+      const u = await getInitUser(req);
+      if (!u) return json({ error: "unauthorized" }, 401);
+      const body = await req.json();
+      const reqId = Number(body.request_id);
+      const method = String(body.method || "");
+      if (!reqId || !["cash", "card", "online"].includes(method)) return json({ error: "bad params" }, 400);
+
+      const { data: r } = await supabase.from("requests").select("id, telegram_id").eq("id", reqId).single();
+      if (!r) return json({ error: "not found" }, 404);
+      if (r.telegram_id !== u.id) return json({ error: "forbidden" }, 403);
+
+      await supabase.from("requests").update({ payment_method: method }).eq("id", reqId);
+      const card = method === "card" ? await getSetting("card_details", "") : "";
+      return json({ ok: true, card_details: card });
     }
 
     // -------- 3d. Вебхук ЮKassa (вызывает ЮKassa, не фронт) --------
@@ -686,6 +704,7 @@ Deno.serve(async (req) => {
         return json({
           start_message: map["start_message"] ?? "",
           start_button:  map["start_button"]  ?? "",
+          card_details:  map["card_details"]  ?? "",
         });
       }
 
@@ -694,6 +713,7 @@ Deno.serve(async (req) => {
         const rows = [
           { key: "start_message", value: (body.start_message ?? "").toString() },
           { key: "start_button",  value: (body.start_button  ?? "").toString() },
+          { key: "card_details",  value: (body.card_details  ?? "").toString() },
         ];
         const { error } = await supabase.from("settings").upsert(rows, { onConflict: "key" });
         if (error) return json({ error: error.message }, 500);
@@ -718,6 +738,22 @@ Deno.serve(async (req) => {
 
       if (req.method === "PATCH") {
         const body = await req.json();
+
+        // Ручная отметка оплаты администратором
+        if (typeof body.set_paid === "boolean") {
+          if (!body.id) return json({ error: "id required" }, 400);
+          const upd = body.set_paid
+            ? { is_paid: true,  payment_status: "manual", paid_at: new Date().toISOString() }
+            : { is_paid: false, payment_status: null,     paid_at: null };
+          const { data, error } = await supabase
+            .from("requests").update(upd).eq("id", body.id).select().single();
+          if (error) return json({ error: error.message }, 500);
+          if (body.set_paid && data?.telegram_id) {
+            try { await tg("sendMessage", { chat_id: data.telegram_id, text: `✅ Оплата заявки #${data.id} подтверждена. Спасибо!` }); } catch (_e) { /* */ }
+          }
+          return json({ request: data });
+        }
+
         const allowed = ["new", "in_progress", "done", "canceled"];
         if (!body.id || !allowed.includes(body.status)) {
           return json({ error: "bad params" }, 400);

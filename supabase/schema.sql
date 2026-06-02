@@ -75,6 +75,7 @@ create table if not exists public.requests (
   total               numeric(12,2) not null default 0,
   status              text not null default 'new',  -- new | in_progress | done | canceled
   is_paid             boolean not null default false,
+  payment_method      text,                          -- online | cash | card
   payment_id          text,
   payment_status      text,                          -- pending | succeeded | canceled
   paid_at             timestamptz,

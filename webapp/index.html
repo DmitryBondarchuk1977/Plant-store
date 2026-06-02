@@ -295,6 +295,16 @@
   .pay-tag{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:700;white-space:nowrap}
   .pay-tag.pp{background:#23b26d22;color:#1a9e5e}
   .pay-tag.pn{background:#c98a0022;color:#c98a00}
+  /* выбор способа оплаты */
+  .pm-opt{display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;
+    background:var(--card);border:none;border-radius:14px;padding:16px;margin-bottom:10px;color:var(--text)}
+  .pm-opt:active{opacity:.85}
+  .pm-ico{font-size:26px;line-height:1;flex:none}
+  .pm-txt{display:flex;flex-direction:column}
+  .pm-t{font-weight:700;font-size:15px}
+  .pm-d{font-size:12px;color:var(--hint);margin-top:2px}
+  #pm-card-details{background:var(--card);border-radius:14px;padding:14px;margin-top:6px;
+    white-space:pre-wrap;font-size:14px;line-height:1.5}
   .cat-tag{display:inline-block;font-size:11px;color:var(--hint);margin-top:4px}
   .form-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .form-gallery .fg-item{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;
@@ -374,6 +384,17 @@
   </div>
 </section>
 
+<!-- PAYMENT METHOD -->
+<section id="view-paymethod" class="hidden">
+  <div class="topbar"><h1>Способ оплаты</h1></div>
+  <p class="hint" id="pm-sub" style="margin-bottom:14px">Заявка оформлена. Выберите, как оплатить.</p>
+  <button class="pm-opt" id="pm-online"><span class="pm-ico">💳</span><span class="pm-txt"><span class="pm-t">Оплата в приложении</span><span class="pm-d">Картой онлайн</span></span></button>
+  <button class="pm-opt" id="pm-cash"><span class="pm-ico">💵</span><span class="pm-txt"><span class="pm-t">Наличными</span><span class="pm-d">При получении</span></span></button>
+  <button class="pm-opt" id="pm-card"><span class="pm-ico">🏦</span><span class="pm-txt"><span class="pm-t">Переводом на карту</span><span class="pm-d">Реквизиты покажем после выбора</span></span></button>
+  <div id="pm-card-details" class="hidden"></div>
+  <button class="btn btn-ghost" id="pm-skip" style="margin-top:16px">Перейти к моим заявкам</button>
+</section>
+
 <!-- DETAIL -->
 <section id="view-detail" class="hidden detail">
   <div class="gallery-wrap">
@@ -444,6 +465,8 @@
     <textarea id="set-start-msg" rows="3" placeholder="👋 Это каталог. Нажмите «Открыть каталог»…"></textarea>
     <label>Текст кнопки открытия каталога</label>
     <input id="set-start-btn" type="text" placeholder="🛍 Открыть каталог" />
+    <label>Реквизиты для перевода на карту</label>
+    <textarea id="set-card" rows="3" placeholder="Например: Карта 0000 0000 0000 0000, Получатель Иван И."></textarea>
     <button class="btn btn-primary" id="set-save" style="margin-top:14px">Сохранить</button>
     <p class="hint" style="margin-top:10px">Изменения применяются к новым сообщениям /start.</p>
   </div>
@@ -594,7 +617,7 @@ let browseSub = null;
 let MY_REQUESTS = [];
 let myReqFilter = "all";
 
-const VIEWS = ["catalog","catbrowse","browse","orders","detail","cart","checkout","admin","admin-form","cat-form","ann-form"];
+const VIEWS = ["catalog","catbrowse","browse","orders","detail","cart","checkout","paymethod","admin","admin-form","cat-form","ann-form"];
 let view = "catalog";
 
 function show(name){
@@ -618,6 +641,7 @@ function updateChrome(){
   else if(view==="detail"){ tg.BackButton.show(); tg.MainButton.hide(); }
   else if(view==="cart"){ tg.BackButton.show(); cartCount()>0 ? mainBtn("Оформить заявку") : tg.MainButton.hide(); }
   else if(view==="checkout"){ tg.BackButton.show(); mainBtn("Отправить заявку"); }
+  else if(view==="paymethod"){ tg.BackButton.show(); tg.MainButton.hide(); }
   else if(view==="admin"){ tg.BackButton.show(); tg.MainButton.hide(); }
   else if(view==="admin-form"){ tg.BackButton.show(); mainBtn("Сохранить"); }
   else if(view==="cat-form"){ tg.BackButton.show(); mainBtn("Сохранить"); }
@@ -644,6 +668,7 @@ function onBack(){
   else if(view==="browse") show("catbrowse");
   else if(view==="cart") show("catalog");
   else if(view==="checkout") show("cart");
+  else if(view==="paymethod") show("catalog");
   else if(view==="admin") show("catalog");
   else if(view==="admin-form") show("admin");
   else if(view==="cat-form") show("admin");
@@ -976,9 +1001,13 @@ function renderMyOrder(r){
     <div class="pay-row">${
       r.is_paid
         ? '<span class="paid">✅ Оплачено</span>'
-        : (Number(r.total)>0 && r.status!=="canceled"
-            ? `<button class="btn btn-primary btn-sm pay-btn">Оплатить ${fmt(r.total)}</button>`
-            : '')
+        : r.payment_method==="cash"
+          ? '<span class="hint">Оплата наличными при получении</span>'
+          : r.payment_method==="card"
+            ? '<span class="hint">Оплата переводом на карту</span>'
+            : (Number(r.total)>0 && r.status!=="canceled"
+                ? `<button class="btn btn-primary btn-sm pay-btn">Оплатить ${fmt(r.total)}</button>`
+                : '')
     }</div>`;
   const payBtn = el.querySelector(".pay-btn");
   if(payBtn) payBtn.onclick = ()=> payOrder(r.id);
@@ -1166,6 +1195,7 @@ async function submitRequest(){
   if(!phone){ tg?.showAlert?.("Укажите телефон"); return; }
 
   tg?.MainButton.showProgress?.();
+  const totalBefore = cartTotal();
   const res = await api("/submit","POST",{
     items, firstName:first, lastName:$("f-last").value.trim(),
     phone, comment:$("f-comment").value.trim(),
@@ -1175,21 +1205,17 @@ async function submitRequest(){
   if(res?.ok){
     CART={}; saveCart();
     tg?.HapticFeedback?.notificationOccurred?.("success");
-    const rid = res.request_id;
-    // пробуем создать оплату ЮKassa (если эквайринг настроен на бэке)
-    const pay = await api("/pay","POST",{ request_id: rid });
-    if(pay?.confirmation_url){
-      openPay(pay.confirmation_url);
-      tg?.showAlert?.(`Заявка #${rid} создана. Откроется страница оплаты. После оплаты статус обновится в разделе «Заявки».`);
-      show("orders"); loadOrders();
-    } else {
-      tg?.showAlert?.("✅ Заявка отправлена! Менеджер свяжется с вами.");
-      show("catalog");
-    }
+    payRequestId = res.request_id;
+    payRequestTotal = totalBefore;
+    $("pm-sub").textContent = `Заявка #${payRequestId} оформлена. Выберите, как оплатить.`;
+    $("pm-card-details").classList.add("hidden");
+    $("pm-card-details").textContent = "";
+    show("paymethod");
   } else {
     tg?.showAlert?.("Ошибка отправки: "+(res?.error||"попробуйте позже"));
   }
 }
+let payRequestId = null, payRequestTotal = 0;
 function openPay(url){
   if(tg?.openLink) tg.openLink(url); else window.open(url,"_blank");
 }
@@ -1198,6 +1224,28 @@ async function payOrder(id){
   if(pay?.confirmation_url) openPay(pay.confirmation_url);
   else tg?.showAlert?.("Не удалось создать оплату: "+(pay?.error||"попробуйте позже"));
 }
+// выбор способа оплаты после оформления
+$("pm-online").onclick = async ()=>{
+  if(!payRequestId) return;
+  await payOrder(payRequestId);
+  show("orders"); loadOrders();
+};
+$("pm-cash").onclick = async ()=>{
+  if(!payRequestId) return;
+  await api("/method","POST",{ request_id:payRequestId, method:"cash" });
+  tg?.showAlert?.("Заявка оформлена. Оплата наличными при получении.");
+  show("orders"); loadOrders();
+};
+$("pm-card").onclick = async ()=>{
+  if(!payRequestId) return;
+  const res = await api("/method","POST",{ request_id:payRequestId, method:"card" });
+  const box = $("pm-card-details");
+  box.textContent = (res?.card_details && res.card_details.trim())
+    ? "Реквизиты для перевода:\n" + res.card_details
+    : "Менеджер пришлёт реквизиты для перевода в сообщении.";
+  box.classList.remove("hidden");
+};
+$("pm-skip").onclick = ()=>{ show("orders"); loadOrders(); };
 
 // ---------- Admin ----------
 async function loadAdmin(){
@@ -1272,11 +1320,13 @@ async function loadSettings(){
   const res = await api("/admin/settings","GET");
   $("set-start-msg").value = res?.start_message || "";
   $("set-start-btn").value = res?.start_button || "";
+  $("set-card").value = res?.card_details || "";
 }
 $("set-save").onclick = async ()=>{
   const res = await api("/admin/settings","POST",{
     start_message: $("set-start-msg").value.trim(),
     start_button:  $("set-start-btn").value.trim(),
+    card_details:  $("set-card").value.trim(),
   });
   if(res?.ok) tg?.showAlert?.("Сохранено"); else tg?.showAlert?.("Ошибка: "+(res?.error||""));
 };
@@ -1457,6 +1507,7 @@ const STATUSES = [
   { key:"canceled",    label:"Отмена" },
 ];
 const STATUS_LABEL = { new:"Новая", in_progress:"В работе", done:"Выполнена", canceled:"Отменена" };
+const PM_LABEL = { online:"оплата онлайн", cash:"наличными", card:"перевод на карту" };
 const REQ_FILTERS = [
   { key:"all",         label:"Все" },
   { key:"new",         label:"Новые" },
@@ -1537,8 +1588,11 @@ function renderRequest(r){
     <div class="contact">${phone ? `<a href="tel:${phone}">📞 ${escapeHtml(phone)}</a>` : '<span class="hint">телефон не указан</span>'}</div>
     ${r.comment ? `<div class="cmt">💬 ${escapeHtml(r.comment)}</div>` : ""}
     <div class="req-items"></div>
-    <div class="sum">Итого: ${fmt(r.total)}</div>
+    <div class="sum">Итого: ${fmt(r.total)}${r.payment_method ? ` · <span class="hint">${PM_LABEL[r.payment_method]||r.payment_method}</span>` : ''}</div>
+    ${Number(r.total)>0 ? `<button class="btn ${r.is_paid?'btn-ghost':'btn-primary'} btn-sm mark-paid">${r.is_paid?'Снять отметку оплаты':'Отметить оплаченной'}</button>` : ''}
     <div class="seg"></div>`;
+  const mp = el.querySelector(".mark-paid");
+  if(mp) mp.onclick = ()=> setPaid(r, !r.is_paid, el);
   // позиции с миниатюрами, клик → детальный товара
   const itemsBox = el.querySelector(".req-items");
   (r.items||[]).forEach(i=>{
@@ -1583,6 +1637,23 @@ async function setStatus(r, status, el){
     else el.replaceWith(renderRequest(r));
   } else {
     tg?.showAlert?.("Не удалось изменить статус: "+(res?.error||""));
+  }
+}
+async function setPaid(r, paid, el){
+  if(paid){
+    const ok = await new Promise(res=> tg?.showConfirm ? tg.showConfirm(`Отметить заявку #${r.id} оплаченной?`, res) : res(confirm("Отметить оплаченной?")));
+    if(!ok) return;
+  }
+  const res = await api("/admin/requests","PATCH",{ id:r.id, set_paid:paid });
+  if(res?.request){
+    r.is_paid = paid;
+    const idx = ALL_REQUESTS.findIndex(x=>x.id===r.id);
+    if(idx>=0) ALL_REQUESTS[idx].is_paid = paid;
+    tg?.HapticFeedback?.impactOccurred?.("light");
+    if(reqPayFilter!=="all") renderReqList();
+    else el.replaceWith(renderRequest(r));
+  } else {
+    tg?.showAlert?.("Не удалось изменить оплату: "+(res?.error||""));
   }
 }
 let productImages = []; // [{url} | {base64}]
