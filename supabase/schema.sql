@@ -78,6 +78,8 @@ create table if not exists public.requests (
   payment_id          text,
   payment_status      text,                          -- pending | succeeded | canceled
   paid_at             timestamptz,
+  reminder_count      int not null default 0,
+  last_reminder_at    timestamptz,
   created_at          timestamptz not null default now()
 );
 

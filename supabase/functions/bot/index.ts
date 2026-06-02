@@ -29,6 +29,12 @@ const YK_SECRET  = Deno.env.get("YOOKASSA_SECRET_KEY") ?? "";
 const YK_RETURN  = Deno.env.get("PAYMENT_RETURN_URL") ?? WEBAPP_URL;
 const YK_VAT     = Deno.env.get("YOOKASSA_VAT_CODE") ?? ""; // если задан — формируем чек 54-ФЗ
 
+// Автонапоминания о неоплаченных заявках
+const CRON_SECRET      = Deno.env.get("CRON_SECRET") ?? "";
+const REMIND_AFTER_MIN = Number(Deno.env.get("REMIND_AFTER_MIN") ?? "60");    // через сколько минут после создания
+const REMIND_EVERY_MIN = Number(Deno.env.get("REMIND_EVERY_MIN") ?? "1440");  // минимальный интервал между напоминаниями
+const REMIND_MAX       = Number(Deno.env.get("REMIND_MAX") ?? "2");           // максимум напоминаний на заявку
+
 function ykAuth(): string {
   return "Basic " + btoa(`${YK_SHOP_ID}:${YK_SECRET}`);
 }
@@ -392,6 +398,55 @@ Deno.serve(async (req) => {
         await supabase.from("requests").update({ payment_status: "canceled" }).eq("id", reqId);
       }
       return json({ ok: true });
+    }
+
+    // -------- 3e. Cron: напоминания о неоплаченных заявках --------
+    if (path === "/cron/remind" && req.method === "POST") {
+      // защита: вызывать может только планировщик с правильным ключом
+      if (!CRON_SECRET || req.headers.get("x-cron-key") !== CRON_SECRET) {
+        return json({ error: "forbidden" }, 403);
+      }
+      if (!YK_SHOP_ID || !YK_SECRET) return json({ error: "payments not configured" }, 503);
+
+      const now = Date.now();
+      const createdBefore = new Date(now - REMIND_AFTER_MIN * 60000).toISOString();
+      const remindBefore  = new Date(now - REMIND_EVERY_MIN * 60000).toISOString();
+
+      const { data: reqs } = await supabase
+        .from("requests")
+        .select("*, items:request_items(product_name, price, qty)")
+        .eq("is_paid", false)
+        .neq("status", "canceled")
+        .gt("total", 0)
+        .lt("created_at", createdBefore)
+        .lt("reminder_count", REMIND_MAX)
+        .or(`last_reminder_at.is.null,last_reminder_at.lt.${remindBefore}`)
+        .limit(25);
+
+      let sent = 0;
+      for (const r of (reqs ?? [])) {
+        if (!r.telegram_id) continue;
+        const items = (r.items || []).map((i: { product_name: string; price: number; qty: number }) => ({
+          name: i.product_name, price: Number(i.price) * Number(i.qty), qty: Number(i.qty),
+        }));
+        const pay = await ykCreatePayment(Number(r.total), `Заявка #${r.id}`, r.id, r.phone || undefined, items);
+        if (!pay || !pay.url) continue;
+        try {
+          await tg("sendMessage", {
+            chat_id: r.telegram_id,
+            text: `🔔 Напоминание: заявка #${r.id} на сумму ${fmt(Number(r.total))} ещё не оплачена.`,
+            reply_markup: { inline_keyboard: [[{ text: `Оплатить ${fmt(Number(r.total))}`, url: pay.url }]] },
+          });
+          await supabase.from("requests").update({
+            payment_id: pay.id,
+            payment_status: pay.status || "pending",
+            reminder_count: (r.reminder_count || 0) + 1,
+            last_reminder_at: new Date().toISOString(),
+          }).eq("id", r.id);
+          sent++;
+        } catch (_e) { /* клиент мог не писать боту */ }
+      }
+      return json({ ok: true, sent });
     }
 
     // -------- 4. Админ: товары --------
