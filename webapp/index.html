@@ -289,6 +289,8 @@
   .order .id{font-weight:700}
   .order .date{font-size:12px;color:var(--hint);margin-bottom:8px}
   .order .sum{font-weight:700;margin-top:8px}
+  .order .pay-row{margin-top:10px}
+  .order .paid{color:#1a9e5e;font-weight:700;font-size:14px}
   .cat-tag{display:inline-block;font-size:11px;color:var(--hint);margin-top:4px}
   .form-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .form-gallery .fg-item{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;
@@ -962,7 +964,16 @@ function renderMyOrder(r){
     </div>
     <div class="date">${date}</div>
     <div class="req-items"></div>
-    <div class="sum">Итого: ${fmt(r.total)}</div>`;
+    <div class="sum">Итого: ${fmt(r.total)}</div>
+    <div class="pay-row">${
+      r.is_paid
+        ? '<span class="paid">✅ Оплачено</span>'
+        : (Number(r.total)>0 && r.status!=="canceled"
+            ? `<button class="btn btn-primary btn-sm pay-btn">Оплатить ${fmt(r.total)}</button>`
+            : '')
+    }</div>`;
+  const payBtn = el.querySelector(".pay-btn");
+  if(payBtn) payBtn.onclick = ()=> payOrder(r.id);
   const box=el.querySelector(".req-items");
   (r.items||[]).forEach(i=>{
     const img=i.product?.image_url||"";
@@ -1156,11 +1167,28 @@ async function submitRequest(){
   if(res?.ok){
     CART={}; saveCart();
     tg?.HapticFeedback?.notificationOccurred?.("success");
-    tg?.showAlert?.("✅ Заявка отправлена! Менеджер свяжется с вами.", ()=> tg?.close?.());
-    show("catalog");
+    const rid = res.request_id;
+    // пробуем создать оплату ЮKassa (если эквайринг настроен на бэке)
+    const pay = await api("/pay","POST",{ request_id: rid });
+    if(pay?.confirmation_url){
+      openPay(pay.confirmation_url);
+      tg?.showAlert?.(`Заявка #${rid} создана. Откроется страница оплаты. После оплаты статус обновится в разделе «Заявки».`);
+      show("orders"); loadOrders();
+    } else {
+      tg?.showAlert?.("✅ Заявка отправлена! Менеджер свяжется с вами.");
+      show("catalog");
+    }
   } else {
     tg?.showAlert?.("Ошибка отправки: "+(res?.error||"попробуйте позже"));
   }
+}
+function openPay(url){
+  if(tg?.openLink) tg.openLink(url); else window.open(url,"_blank");
+}
+async function payOrder(id){
+  const pay = await api("/pay","POST",{ request_id:id });
+  if(pay?.confirmation_url) openPay(pay.confirmation_url);
+  else tg?.showAlert?.("Не удалось создать оплату: "+(pay?.error||"попробуйте позже"));
 }
 
 // ---------- Admin ----------
@@ -1466,7 +1494,7 @@ function renderRequest(r){
       <span class="id">Заявка #${r.id}</span>
       <span class="status-tag st-${r.status}">${STATUS_LABEL[r.status]||r.status}</span>
     </div>
-    <div class="date">${date}</div>
+    <div class="date">${date}${r.is_paid ? ' · <span style="color:#1a9e5e;font-weight:700">оплачено</span>' : (Number(r.total)>0 ? ' · <span style="color:#c98a00;font-weight:700">не оплачено</span>' : '')}</div>
     <div class="who">${name}</div>
     <div class="contact">${phone ? `<a href="tel:${phone}">📞 ${escapeHtml(phone)}</a>` : '<span class="hint">телефон не указан</span>'}</div>
     ${r.comment ? `<div class="cmt">💬 ${escapeHtml(r.comment)}</div>` : ""}

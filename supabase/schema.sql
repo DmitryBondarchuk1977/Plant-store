@@ -74,6 +74,10 @@ create table if not exists public.requests (
   comment             text,
   total               numeric(12,2) not null default 0,
   status              text not null default 'new',  -- new | in_progress | done | canceled
+  is_paid             boolean not null default false,
+  payment_id          text,
+  payment_status      text,                          -- pending | succeeded | canceled
+  paid_at             timestamptz,
   created_at          timestamptz not null default now()
 );
 

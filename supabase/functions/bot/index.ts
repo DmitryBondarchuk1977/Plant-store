@@ -23,6 +23,58 @@ const WEBAPP_URL = Deno.env.get("WEBAPP_URL") ?? "";
 const ADMIN_IDS = (Deno.env.get("ADMIN_IDS") ?? "")
   .split(",").map((s) => s.trim()).filter(Boolean);
 
+// ЮKassa (эквайринг). Ключи только здесь, на бэке.
+const YK_SHOP_ID = Deno.env.get("YOOKASSA_SHOP_ID") ?? "";
+const YK_SECRET  = Deno.env.get("YOOKASSA_SECRET_KEY") ?? "";
+const YK_RETURN  = Deno.env.get("PAYMENT_RETURN_URL") ?? WEBAPP_URL;
+const YK_VAT     = Deno.env.get("YOOKASSA_VAT_CODE") ?? ""; // если задан — формируем чек 54-ФЗ
+
+function ykAuth(): string {
+  return "Basic " + btoa(`${YK_SHOP_ID}:${YK_SECRET}`);
+}
+// Создать платёж в ЮKassa → вернуть { id, confirmation_url } | null
+async function ykCreatePayment(amount: number, description: string, requestId: number, receiptPhone?: string, items?: { name: string; price: number; qty: number }[]) {
+  const body: Record<string, unknown> = {
+    amount: { value: amount.toFixed(2), currency: "RUB" },
+    capture: true,
+    confirmation: { type: "redirect", return_url: YK_RETURN },
+    description: description.slice(0, 128),
+    metadata: { request_id: requestId },
+  };
+  // Чек по 54-ФЗ — только если задан код НДС (YOOKASSA_VAT_CODE)
+  if (YK_VAT && items && items.length) {
+    body.receipt = {
+      customer: receiptPhone ? { phone: receiptPhone } : {},
+      items: items.map((i) => ({
+        description: i.name.slice(0, 128),
+        quantity: i.qty.toFixed(2),
+        amount: { value: i.price.toFixed(2), currency: "RUB" },
+        vat_code: Number(YK_VAT),
+      })),
+    };
+  }
+  const resp = await fetch("https://api.yookassa.ru/v3/payments", {
+    method: "POST",
+    headers: {
+      "Authorization": ykAuth(),
+      "Idempotence-Key": crypto.randomUUID(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  return { id: data.id as string, url: data?.confirmation?.confirmation_url as string, status: data.status as string };
+}
+// Перепроверить статус платежа напрямую у ЮKassa (не доверяем телу вебхука)
+async function ykGetPayment(id: string) {
+  const resp = await fetch(`https://api.yookassa.ru/v3/payments/${id}`, {
+    headers: { "Authorization": ykAuth() },
+  });
+  if (!resp.ok) return null;
+  return await resp.json();
+}
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -276,6 +328,70 @@ Deno.serve(async (req) => {
         .limit(100);
       if (error) return json({ error: error.message }, 500);
       return json({ requests: data ?? [] });
+    }
+
+    // -------- 3c. Создать платёж ЮKassa для заявки --------
+    if (path === "/pay" && req.method === "POST") {
+      const u = await getInitUser(req);
+      if (!u) return json({ error: "unauthorized" }, 401);
+      if (!YK_SHOP_ID || !YK_SECRET) return json({ error: "payments not configured" }, 503);
+
+      const body = await req.json();
+      const reqId = Number(body.request_id);
+      if (!reqId) return json({ error: "request_id required" }, 400);
+
+      const { data: r } = await supabase
+        .from("requests")
+        .select("*, items:request_items(product_name, price, qty)")
+        .eq("id", reqId).single();
+      if (!r) return json({ error: "not found" }, 404);
+      if (r.telegram_id !== u.id) return json({ error: "forbidden" }, 403);
+      if (r.is_paid) return json({ error: "already paid" }, 409);
+      if (!(Number(r.total) > 0)) return json({ error: "zero amount" }, 400);
+
+      const items = (r.items || []).map((i: { product_name: string; price: number; qty: number }) => ({
+        name: i.product_name, price: Number(i.price) * Number(i.qty), qty: Number(i.qty),
+      }));
+      const pay = await ykCreatePayment(Number(r.total), `Заявка #${r.id}`, r.id, r.phone || undefined, items);
+      if (!pay || !pay.url) return json({ error: "payment create failed" }, 502);
+
+      await supabase.from("requests")
+        .update({ payment_id: pay.id, payment_status: pay.status || "pending" })
+        .eq("id", r.id);
+      return json({ confirmation_url: pay.url });
+    }
+
+    // -------- 3d. Вебхук ЮKassa (вызывает ЮKassa, не фронт) --------
+    if (path === "/yookassa" && req.method === "POST") {
+      let evt: { event?: string; object?: { id?: string } };
+      try { evt = await req.json(); } catch { return json({ ok: true }); }
+      const payId = evt?.object?.id;
+      if (!payId) return json({ ok: true });
+
+      // Не доверяем телу: перепроверяем статус напрямую у ЮKassa.
+      const pay = await ykGetPayment(payId);
+      const reqId = Number(pay?.metadata?.request_id);
+      if (!pay || !reqId) return json({ ok: true });
+
+      if (pay.status === "succeeded") {
+        const { data: r } = await supabase.from("requests").select("*").eq("id", reqId).single();
+        if (r && !r.is_paid) {
+          await supabase.from("requests").update({
+            is_paid: true, payment_status: "succeeded", paid_at: new Date().toISOString(),
+          }).eq("id", reqId);
+          // уведомления
+          const sum = fmt(Number(r.total));
+          for (const adminId of ADMIN_IDS) {
+            await tg("sendMessage", { chat_id: adminId, text: `💳 Заявка #${reqId} оплачена (${sum}).` });
+          }
+          if (r.telegram_id) {
+            try { await tg("sendMessage", { chat_id: r.telegram_id, text: `✅ Оплата заявки #${reqId} получена. Спасибо!` }); } catch (_e) { /* */ }
+          }
+        }
+      } else if (pay.status === "canceled") {
+        await supabase.from("requests").update({ payment_status: "canceled" }).eq("id", reqId);
+      }
+      return json({ ok: true });
     }
 
     // -------- 4. Админ: товары --------
