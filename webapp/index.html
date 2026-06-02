@@ -264,6 +264,7 @@
   .nav-btn{flex:1;border:none;background:transparent;cursor:pointer;display:flex;flex-direction:column;
     align-items:center;gap:2px;padding:6px 0;color:var(--hint);font-size:11px;font-weight:600}
   .nav-btn .nav-ico{font-size:21px;line-height:1;filter:grayscale(1);opacity:.6}
+  .nav-btn .nav-ico .svgi{width:23px;height:23px;display:block}
   .nav-btn.on{color:var(--btn)}
   .nav-btn.on .nav-ico{filter:none;opacity:1}
 
@@ -510,13 +511,25 @@
 <!-- BOTTOM NAV -->
 <nav id="bottom-nav" class="bottom-nav hidden">
   <button class="nav-btn" id="nav-home">
-    <span class="nav-ico">🏠</span><span class="nav-lbl">Главная</span>
+    <span class="nav-ico">
+      <span class="emo" id="ni-home-e">🏠</span>
+      <svg id="ni-home-s" class="svgi hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.7 12 3l9 7.7"/><path d="M5.5 9.5V20h13V9.5"/></svg>
+    </span>
+    <span class="nav-lbl">Главная</span>
   </button>
   <button class="nav-btn" id="nav-cat">
-    <span class="nav-ico">📂</span><span class="nav-lbl">Каталог</span>
+    <span class="nav-ico">
+      <span class="emo" id="ni-cat-e">📂</span>
+      <svg id="ni-cat-s" class="svgi hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+    </span>
+    <span class="nav-lbl">Каталог</span>
   </button>
   <button class="nav-btn" id="nav-orders">
-    <span class="nav-ico">🧾</span><span class="nav-lbl">Заявки</span>
+    <span class="nav-ico">
+      <span class="emo" id="ni-ord-e">🧾</span>
+      <svg id="ni-ord-s" class="svgi hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2.2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21V3z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
+    </span>
+    <span class="nav-lbl">Заявки</span>
   </button>
 </nav>
 
@@ -1648,11 +1661,17 @@ function supportsEmoji(ch){
     return drawn && colored;
   }catch(e){ return true; }
 }
-function applyCartIcon(){
-  if(!supportsEmoji("🪴")){
-    $("cart-emoji").classList.add("hidden");
-    $("cart-svg").classList.remove("hidden");
+function emojiOrSvg(emoji, emoEl, svgEl){
+  if(emoEl && svgEl && !supportsEmoji(emoji)){
+    emoEl.classList.add("hidden");
+    svgEl.classList.remove("hidden");
   }
+}
+function applyCartIcon(){
+  emojiOrSvg("🪴", $("cart-emoji"), $("cart-svg"));
+  emojiOrSvg("🏠", $("ni-home-e"), $("ni-home-s"));
+  emojiOrSvg("📂", $("ni-cat-e"),  $("ni-cat-s"));
+  emojiOrSvg("🧾", $("ni-ord-e"),  $("ni-ord-s"));
 }
 
 // ---------- init ----------
