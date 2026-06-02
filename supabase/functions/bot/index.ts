@@ -254,6 +254,20 @@ Deno.serve(async (req) => {
       return json({ ok: true, request_id: reqRow.id });
     }
 
+    // -------- 3b. Мои заявки (для пользователя) --------
+    if (path === "/my/requests" && req.method === "POST") {
+      const u = await getInitUser(req);
+      if (!u) return json({ error: "unauthorized" }, 401);
+      const { data, error } = await supabase
+        .from("requests")
+        .select("*, items:request_items(*, product:products(image_url, images, description, category_id, is_active))")
+        .eq("telegram_id", u.id)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) return json({ error: error.message }, 500);
+      return json({ requests: data ?? [] });
+    }
+
     // -------- 4. Админ: товары --------
     if (path === "/admin/products") {
       const u = await getInitUser(req);

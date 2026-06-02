@@ -255,6 +255,38 @@
   @media (hover:hover) and (pointer:fine){ .lb .lb-nav{display:flex} }
   /* фото на детальном — кликабельны */
   .detail-img-wrap{cursor:zoom-in}
+
+  /* нижнее меню */
+  body.with-nav{padding-bottom:78px}
+  .bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;
+    background:var(--bg);border-top:1px solid color-mix(in srgb, var(--text) 10%, transparent);
+    padding:6px 6px calc(6px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto}
+  .nav-btn{flex:1;border:none;background:transparent;cursor:pointer;display:flex;flex-direction:column;
+    align-items:center;gap:2px;padding:6px 0;color:var(--hint);font-size:11px;font-weight:600}
+  .nav-btn .nav-ico{font-size:21px;line-height:1;filter:grayscale(1);opacity:.6}
+  .nav-btn.on{color:var(--btn)}
+  .nav-btn.on .nav-ico{filter:none;opacity:1}
+
+  /* каталог-аккордеон */
+  .cat-row{background:var(--card);border-radius:14px;margin-bottom:8px;overflow:hidden}
+  .cat-row .cat-main{display:flex;align-items:center;gap:12px;padding:12px;cursor:pointer}
+  .cat-row .cat-ava{width:44px;height:44px;border-radius:50%;object-fit:cover;flex:none;
+    background:linear-gradient(160deg,#dff1e6,#eef7f0)}
+  .cat-row .cat-nm{flex:1;font-weight:700;font-size:15px}
+  .cat-row .cat-arrow{color:var(--hint);font-size:18px;transition:transform .2s}
+  .cat-row.open .cat-arrow{transform:rotate(90deg)}
+  .cat-subs{display:none;padding:0 12px 6px}
+  .cat-row.open .cat-subs{display:block}
+  .cat-sub{padding:11px 10px;border-top:1px solid color-mix(in srgb, var(--text) 8%, transparent);
+    cursor:pointer;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+  .cat-sub .a{color:var(--hint)}
+
+  /* мои заявки */
+  .order{background:var(--card);border-radius:14px;padding:12px;margin-bottom:10px}
+  .order .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  .order .id{font-weight:700}
+  .order .date{font-size:12px;color:var(--hint);margin-bottom:8px}
+  .order .sum{font-weight:700;margin-top:8px}
   .cat-tag{display:inline-block;font-size:11px;color:var(--hint);margin-top:4px}
   .form-gallery{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .form-gallery .fg-item{position:relative;width:76px;height:76px;border-radius:10px;overflow:hidden;
@@ -307,6 +339,31 @@
   <div id="catalog-grid" class="grid"></div>
   <p id="catalog-empty" class="hint center hidden" style="margin-top:40px">Каталог пока пуст.</p>
   <p id="catalog-nofound" class="hint center hidden" style="margin-top:40px">Ничего не найдено.</p>
+</section>
+
+<!-- CATALOG (категории списком) -->
+<section id="view-catbrowse" class="hidden">
+  <div class="topbar"><h1>Каталог</h1></div>
+  <div id="catbrowse-list"></div>
+  <p id="catbrowse-empty" class="hint center hidden" style="margin-top:40px">Категорий пока нет.</p>
+</section>
+
+<!-- BROWSE (товары категории/подкатегории) -->
+<section id="view-browse" class="hidden">
+  <div class="topbar"><h1 id="browse-title">Товары</h1></div>
+  <div id="browse-grid" class="grid"></div>
+  <p id="browse-empty" class="hint center hidden" style="margin-top:40px">В этом разделе пока нет товаров.</p>
+</section>
+
+<!-- ORDERS (мои заявки) -->
+<section id="view-orders" class="hidden">
+  <div class="topbar"><h1>Мои заявки</h1></div>
+  <div id="orders-filter" class="subchips"></div>
+  <div id="orders-list"></div>
+  <div id="orders-empty" class="hint center hidden" style="margin-top:60px">
+    <div style="font-size:40px;margin-bottom:8px">🪴</div>
+    У вас нет заявок
+  </div>
 </section>
 
 <!-- DETAIL -->
@@ -450,6 +507,19 @@
   </div>
 </div>
 
+<!-- BOTTOM NAV -->
+<nav id="bottom-nav" class="bottom-nav hidden">
+  <button class="nav-btn" id="nav-home">
+    <span class="nav-ico">🏠</span><span class="nav-lbl">Главная</span>
+  </button>
+  <button class="nav-btn" id="nav-cat">
+    <span class="nav-ico">📂</span><span class="nav-lbl">Каталог</span>
+  </button>
+  <button class="nav-btn" id="nav-orders">
+    <span class="nav-ico">🧾</span><span class="nav-lbl">Заявки</span>
+  </button>
+</nav>
+
 <!-- LIGHTBOX (полноэкранный просмотр фото) -->
 <div id="lightbox" class="lb hidden">
   <div class="lb-counter" id="lb-counter"></div>
@@ -489,8 +559,12 @@ let catImageBase64 = null;
 let ANNOUNCEMENTS = [];
 let editingAnnId = null;
 let annImageBase64 = null;
+let browseCat = null;        // экран «Каталог»: выбранная категория для показа товаров
+let browseSub = null;
+let MY_REQUESTS = [];
+let myReqFilter = "all";
 
-const VIEWS = ["catalog","detail","cart","checkout","admin","admin-form","cat-form","ann-form"];
+const VIEWS = ["catalog","catbrowse","browse","orders","detail","cart","checkout","admin","admin-form","cat-form","ann-form"];
 let view = "catalog";
 
 function show(name){
@@ -498,6 +572,7 @@ function show(name){
   VIEWS.forEach(v => $("view-"+v).classList.toggle("hidden", v!==name));
   window.scrollTo(0,0);
   updateChrome();
+  updateNav();
 }
 
 // ---------- Telegram chrome (MainButton / BackButton) ----------
@@ -507,6 +582,9 @@ function updateChrome(){
   tg.MainButton.offClick(onMain); tg.MainButton.onClick(onMain);
 
   if(view==="catalog"){ tg.BackButton.hide(); tg.MainButton.hide(); }
+  else if(view==="catbrowse"){ tg.BackButton.hide(); tg.MainButton.hide(); }
+  else if(view==="orders"){ tg.BackButton.hide(); tg.MainButton.hide(); }
+  else if(view==="browse"){ tg.BackButton.show(); tg.MainButton.hide(); }
   else if(view==="detail"){ tg.BackButton.show(); tg.MainButton.hide(); }
   else if(view==="cart"){ tg.BackButton.show(); cartCount()>0 ? mainBtn("Оформить заявку") : tg.MainButton.hide(); }
   else if(view==="checkout"){ tg.BackButton.show(); mainBtn("Отправить заявку"); }
@@ -517,9 +595,23 @@ function updateChrome(){
 }
 function mainBtn(text){ tg.MainButton.setText(text); tg.MainButton.show(); tg.MainButton.enable(); }
 
+// нижнее меню: видно только на основных вкладках
+const NAV_VIEWS = ["catalog","catbrowse","browse","orders"];
+function updateNav(){
+  const nav = $("bottom-nav");
+  const visible = NAV_VIEWS.includes(view);
+  nav.classList.toggle("hidden", !visible);
+  document.body.classList.toggle("with-nav", visible);
+  const tab = (view==="catalog") ? "home" : (view==="catbrowse"||view==="browse") ? "cat" : (view==="orders") ? "orders" : "";
+  $("nav-home").classList.toggle("on", tab==="home");
+  $("nav-cat").classList.toggle("on", tab==="cat");
+  $("nav-orders").classList.toggle("on", tab==="orders");
+}
+
 function onBack(){
   if(lightboxOpen){ closeLightbox(); return; }
   if(view==="detail") show(detailReturn);
+  else if(view==="browse") show("catbrowse");
   else if(view==="cart") show("catalog");
   else if(view==="checkout") show("cart");
   else if(view==="admin") show("catalog");
@@ -723,49 +815,156 @@ function sortProducts(list){
 function updateSortBtn(){
   $("open-sort").classList.toggle("active", sortMode!=="default");
 }
+function makeProductCard(p, returnView){
+  const out = isOut(p);
+  const el = document.createElement("div");
+  el.className="card"+(out?" out":"");
+  el.innerHTML = `
+    <div class="thumb">${p.image_url?`<img src="${p.image_url}" alt="">`:""}${out?'<div class="out-badge">нет в наличии</div>':''}</div>
+    <div class="body">
+      <div class="name">${escapeHtml(p.name)}</div>
+      <div class="card-bottom">
+        <div class="price">${fmt(p.price)}</div>
+        ${out ? '' : `<button class="add-btn" data-id="${p.id}" aria-label="В заявку">+</button>`}
+      </div>
+    </div>`;
+  el.onclick = ()=> openDetail(p.id, returnView);
+  const add = el.querySelector(".add-btn");
+  if(add){
+    setAddBtn(add, p.id);
+    add.onclick = (e)=>{
+      e.stopPropagation();
+      if(CART[p.id]>0) delete CART[p.id]; else CART[p.id]=1;
+      saveCart(); setAddBtn(add, p.id);
+      tg?.HapticFeedback?.impactOccurred?.("light");
+    };
+  }
+  return el;
+}
 function renderCatalog(){
   updateSortBtn();
   const grid = $("catalog-grid"); grid.innerHTML="";
   const list = sortProducts(filteredProducts());
   $("catalog-empty").classList.toggle("hidden", PRODUCTS.length>0);
   $("catalog-nofound").classList.toggle("hidden", !(PRODUCTS.length>0 && list.length===0));
-  list.forEach(p=>{
-    const out = isOut(p);
-    const el = document.createElement("div");
-    el.className="card"+(out?" out":"");
-    el.innerHTML = `
-      <div class="thumb">${p.image_url?`<img src="${p.image_url}" alt="">`:""}${out?'<div class="out-badge">нет в наличии</div>':''}</div>
-      <div class="body">
-        <div class="name">${escapeHtml(p.name)}</div>
-        <div class="card-bottom">
-          <div class="price">${fmt(p.price)}</div>
-          ${out ? '' : `<button class="add-btn" data-id="${p.id}" aria-label="В заявку">+</button>`}
-        </div>
-      </div>`;
-    el.onclick = ()=> openDetail(p.id);
-    const add = el.querySelector(".add-btn");
-    if(add){
-      setAddBtn(add, p.id);
-      add.onclick = (e)=>{
-        e.stopPropagation();
-        if(CART[p.id]>0) delete CART[p.id]; else CART[p.id]=1;
-        saveCart(); setAddBtn(add, p.id);
-        tg?.HapticFeedback?.impactOccurred?.("light");
-      };
+  list.forEach(p=> grid.appendChild(makeProductCard(p, "catalog")));
+}
+
+// ---------- Каталог: категории списком (аккордеон) ----------
+function renderCatBrowse(){
+  const box = $("catbrowse-list"); box.innerHTML="";
+  const usedCat = new Set(PRODUCTS.map(p=>p.category_id).filter(Boolean));
+  const cats = CATEGORIES.filter(c=>usedCat.has(c.id));
+  $("catbrowse-empty").classList.toggle("hidden", cats.length>0);
+  cats.forEach(c=>{
+    const usedSub = new Set(PRODUCTS.filter(p=>p.category_id===c.id && p.subcategory_id).map(p=>p.subcategory_id));
+    const subs = SUBCATEGORIES.filter(s=>s.category_id===c.id && usedSub.has(s.id));
+    const row = document.createElement("div");
+    row.className="cat-row";
+    row.innerHTML = `
+      <div class="cat-main">
+        <img class="cat-ava" src="${c.image_url||""}" alt="">
+        <div class="cat-nm">${escapeHtml(c.name)}</div>
+        <div class="cat-arrow">${subs.length?'›':''}</div>
+      </div>
+      <div class="cat-subs"></div>`;
+    const main = row.querySelector(".cat-main");
+    if(subs.length){
+      const subsBox = row.querySelector(".cat-subs");
+      subsBox.innerHTML =
+        `<div class="cat-sub" data-all="1"><span>Все товары</span><span class="a">›</span></div>` +
+        subs.map(s=>`<div class="cat-sub" data-sub="${s.id}"><span>${escapeHtml(s.name)}</span><span class="a">›</span></div>`).join("");
+      main.onclick = ()=> row.classList.toggle("open");
+      subsBox.querySelector('[data-all]').onclick = ()=> openBrowse(c.id, null, c.name);
+      subsBox.querySelectorAll('[data-sub]').forEach(el=>{
+        el.onclick = ()=> openBrowse(c.id, el.dataset.sub, subs.find(s=>s.id===el.dataset.sub)?.name || c.name);
+      });
+    } else {
+      // нет подкатегорий → сразу к товарам категории
+      main.onclick = ()=> openBrowse(c.id, null, c.name);
     }
-    grid.appendChild(el);
+    box.appendChild(row);
   });
+}
+function openBrowse(catId, subId, title){
+  browseCat = catId; browseSub = subId;
+  $("browse-title").textContent = title || "Товары";
+  const grid = $("browse-grid"); grid.innerHTML="";
+  let list = PRODUCTS.filter(p=> p.category_id===catId && (!subId || p.subcategory_id===subId));
+  list = sortProducts(list);
+  $("browse-empty").classList.toggle("hidden", list.length>0);
+  list.forEach(p=> grid.appendChild(makeProductCard(p, "browse")));
+  show("browse");
+}
+
+// ---------- Мои заявки ----------
+const MY_FILTERS = [
+  { key:"all",         label:"Все" },
+  { key:"new",         label:"Новые" },
+  { key:"in_progress", label:"В работе" },
+  { key:"done",        label:"Выполненные" },
+  { key:"canceled",    label:"Отменённые" },
+];
+async function loadOrders(){
+  const res = await api("/my/requests","POST",{});
+  MY_REQUESTS = res?.requests || [];
+  renderOrdersFilter();
+  renderOrdersList();
+}
+function renderOrdersFilter(){
+  const box=$("orders-filter"); box.innerHTML="";
+  box.classList.toggle("hidden", MY_REQUESTS.length===0);
+  MY_FILTERS.forEach(f=>{
+    const b=document.createElement("button");
+    b.className="subchip"+(myReqFilter===f.key?" on":"");
+    b.textContent=f.label;
+    b.onclick=()=>{ myReqFilter=f.key; renderOrdersFilter(); renderOrdersList(); };
+    box.appendChild(b);
+  });
+}
+function renderOrdersList(){
+  const list=$("orders-list"); list.innerHTML="";
+  const reqs = myReqFilter==="all" ? MY_REQUESTS : MY_REQUESTS.filter(r=>r.status===myReqFilter);
+  $("orders-empty").classList.toggle("hidden", MY_REQUESTS.length>0);
+  reqs.forEach(r=> list.appendChild(renderMyOrder(r)));
+}
+function renderMyOrder(r){
+  const el=document.createElement("div");
+  el.className="order";
+  const date=new Date(r.created_at).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+  el.innerHTML=`
+    <div class="head">
+      <span class="id">Заявка #${r.id}</span>
+      <span class="status-tag st-${r.status}">${STATUS_LABEL[r.status]||r.status}</span>
+    </div>
+    <div class="date">${date}</div>
+    <div class="req-items"></div>
+    <div class="sum">Итого: ${fmt(r.total)}</div>`;
+  const box=el.querySelector(".req-items");
+  (r.items||[]).forEach(i=>{
+    const img=i.product?.image_url||"";
+    const row=document.createElement("div");
+    row.className="req-item";
+    row.innerHTML=`
+      <div class="ri-thumb">${img?`<img src="${img}" alt="">`:""}</div>
+      <div class="ri-meta"><div class="ri-name">${escapeHtml(i.product_name)}</div>
+      <div class="ri-sub">× ${i.qty} — ${fmt(i.price*i.qty)}</div></div>
+      <div class="ri-arrow">›</div>`;
+    row.onclick=()=> openItemDetail(i, "orders");
+    box.appendChild(row);
+  });
+  return el;
 }
 
 // ---------- Detail ----------
 let detailReturn = "catalog";
-function openDetail(id){
+function openDetail(id, ret){
   const p = PRODUCTS.find(x=>x.id===id); if(!p) return;
-  detailReturn = "catalog";
+  detailReturn = ret || "catalog";
   showProductDetail(p, true);
 }
 // открытие товара из заявки (админ): данные берём из позиции + встроенного товара
-function openItemDetail(item){
+function openItemDetail(item, ret){
   const emb = item.product || {};
   const p = {
     id: item.product_id,
@@ -776,7 +975,7 @@ function openItemDetail(item){
     description: emb.description || "",
     category_id: emb.category_id || null,
   };
-  detailReturn = "admin";
+  detailReturn = ret || "admin";
   showProductDetail(p, false);
 }
 let DETAIL_IMAGES = [];
@@ -1415,6 +1614,9 @@ function closeSortSheet(){
   setTimeout(()=> sheet.classList.add("hidden"), 200);
 }
 $("open-sort").onclick = openSortSheet;
+$("nav-home").onclick   = ()=> show("catalog");
+$("nav-cat").onclick    = ()=>{ renderCatBrowse(); show("catbrowse"); };
+$("nav-orders").onclick = ()=>{ show("orders"); loadOrders(); };
 $("sort-sheet").addEventListener("click", (e)=>{ if(e.target.id==="sort-sheet") closeSortSheet(); });
 document.querySelectorAll('#sort-sheet input[name="sort"]').forEach(r=>{
   r.addEventListener("change", ()=>{
