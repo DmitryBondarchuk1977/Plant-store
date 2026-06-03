@@ -1008,9 +1008,15 @@ function renderMyOrder(r){
             : (Number(r.total)>0 && r.status!=="canceled"
                 ? `<button class="btn btn-primary btn-sm pay-btn">Оплатить ${fmt(r.total)}</button>`
                 : '')
+    }${
+      (!r.is_paid && r.status!=="canceled" && r.status!=="done")
+        ? `<button class="btn btn-ghost btn-sm cancel-btn" style="margin-left:8px">Отменить заявку</button>`
+        : ''
     }</div>`;
   const payBtn = el.querySelector(".pay-btn");
   if(payBtn) payBtn.onclick = ()=> payOrder(r.id);
+  const cancelBtn = el.querySelector(".cancel-btn");
+  if(cancelBtn) cancelBtn.onclick = ()=> cancelMyOrder(r.id);
   const box=el.querySelector(".req-items");
   (r.items||[]).forEach(i=>{
     const img=i.product?.image_url||"";
@@ -1223,6 +1229,13 @@ async function payOrder(id){
   const pay = await api("/pay","POST",{ request_id:id });
   if(pay?.confirmation_url) openPay(pay.confirmation_url);
   else tg?.showAlert?.("Не удалось создать оплату: "+(pay?.error||"попробуйте позже"));
+}
+async function cancelMyOrder(id){
+  const ok = await new Promise(res=> tg?.showConfirm ? tg.showConfirm(`Отменить заявку #${id}? Товары вернутся в наличие.`, res) : res(confirm("Отменить заявку?")));
+  if(!ok) return;
+  const res = await api("/my/cancel","POST",{ request_id:id });
+  if(res?.ok){ tg?.HapticFeedback?.notificationOccurred?.("success"); await loadCatalog(); loadOrders(); }
+  else tg?.showAlert?.("Не удалось отменить: "+(res?.error==="paid"?"заявка уже оплачена":(res?.error||"попробуйте позже")));
 }
 // выбор способа оплаты после оформления
 $("pm-online").onclick = async ()=>{

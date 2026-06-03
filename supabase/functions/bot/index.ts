@@ -34,6 +34,7 @@ const CRON_SECRET      = Deno.env.get("CRON_SECRET") ?? "";
 const REMIND_AFTER_MIN = Number(Deno.env.get("REMIND_AFTER_MIN") ?? "60");    // через сколько минут после создания
 const REMIND_EVERY_MIN = Number(Deno.env.get("REMIND_EVERY_MIN") ?? "1440");  // минимальный интервал между напоминаниями
 const REMIND_MAX       = Number(Deno.env.get("REMIND_MAX") ?? "2");           // максимум напоминаний на заявку
+const EXPIRE_AFTER_MIN = Number(Deno.env.get("EXPIRE_AFTER_MIN") ?? "120");   // через сколько минут без оплаты аннулировать
 
 function ykAuth(): string {
   return "Basic " + btoa(`${YK_SHOP_ID}:${YK_SECRET}`);
@@ -189,6 +190,15 @@ async function getSetting(key: string, def: string): Promise<string> {
   return (data && typeof data.value === "string" && data.value.length) ? data.value : def;
 }
 
+// Вернуть зарезервированный остаток по заявке (один раз).
+async function returnStock(r: { id: number; stock_returned?: boolean; items?: { product_id?: string; qty: number }[] }) {
+  if (r.stock_returned) return;
+  for (const i of (r.items ?? [])) {
+    if (i.product_id) await supabase.rpc("adjust_stock", { pid: i.product_id, delta: Number(i.qty) });
+  }
+  await supabase.from("requests").update({ stock_returned: true }).eq("id", r.id);
+}
+
 // ============================================================
 //  Роутер
 // ============================================================
@@ -302,6 +312,11 @@ Deno.serve(async (req) => {
       await supabase.from("request_items")
         .insert(rows.map((r) => ({ ...r, request_id: reqRow.id })));
 
+      // Резервируем остаток (только для товаров с учётом склада)
+      for (const r of rows) {
+        await supabase.rpc("adjust_stock", { pid: r.product_id, delta: -r.qty });
+      }
+
       if (phone) await upsertUser(u, phone);
 
       // Уведомление админам
@@ -385,6 +400,29 @@ Deno.serve(async (req) => {
       return json({ ok: true, card_details: card });
     }
 
+    // -------- 3c3. Отмена своей неоплаченной заявки клиентом --------
+    if (path === "/my/cancel" && req.method === "POST") {
+      const u = await getInitUser(req);
+      if (!u) return json({ error: "unauthorized" }, 401);
+      const body = await req.json();
+      const reqId = Number(body.request_id);
+      if (!reqId) return json({ error: "request_id required" }, 400);
+
+      const { data: r } = await supabase
+        .from("requests")
+        .select("id, telegram_id, is_paid, status, stock_returned, items:request_items(product_id, qty)")
+        .eq("id", reqId).single();
+      if (!r) return json({ error: "not found" }, 404);
+      if (r.telegram_id !== u.id) return json({ error: "forbidden" }, 403);
+      if (r.is_paid) return json({ error: "paid" }, 409);   // оплаченную не отменяем здесь
+      if (r.status === "canceled") return json({ ok: true });
+
+      await returnStock(r);                                  // вернуть остаток
+      await supabase.from("requests")
+        .update({ status: "canceled", payment_status: "canceled" }).eq("id", reqId);
+      return json({ ok: true });
+    }
+
     // -------- 3d. Вебхук ЮKassa (вызывает ЮKassa, не фронт) --------
     if (path === "/yookassa" && req.method === "POST") {
       let evt: { event?: string; object?: { id?: string } };
@@ -427,6 +465,29 @@ Deno.serve(async (req) => {
       if (!YK_SHOP_ID || !YK_SECRET) return json({ error: "payments not configured" }, 503);
 
       const now = Date.now();
+
+      // Аннулировать просроченные неоплаченные онлайн-заявки и вернуть остаток
+      const expireBefore = new Date(now - EXPIRE_AFTER_MIN * 60000).toISOString();
+      const { data: stale } = await supabase
+        .from("requests")
+        .select("id, telegram_id, stock_returned, items:request_items(product_id, qty)")
+        .eq("is_paid", false)
+        .neq("status", "canceled")
+        .gt("total", 0)
+        .lt("created_at", expireBefore)
+        .or("payment_method.is.null,payment_method.eq.online")
+        .limit(50);
+      let expired = 0;
+      for (const r of (stale ?? [])) {
+        await returnStock(r);
+        await supabase.from("requests")
+          .update({ status: "canceled", payment_status: "canceled" }).eq("id", r.id);
+        if (r.telegram_id) {
+          try { await tg("sendMessage", { chat_id: r.telegram_id, text: `⌛️ Заявка #${r.id} отменена: не оплачена в течение ${Math.round(EXPIRE_AFTER_MIN/60)} ч. Товары снова доступны.` }); } catch (_e) { /* */ }
+        }
+        expired++;
+      }
+
       const createdBefore = new Date(now - REMIND_AFTER_MIN * 60000).toISOString();
       const remindBefore  = new Date(now - REMIND_EVERY_MIN * 60000).toISOString();
 
@@ -464,7 +525,7 @@ Deno.serve(async (req) => {
           sent++;
         } catch (_e) { /* клиент мог не писать боту */ }
       }
-      return json({ ok: true, sent });
+      return json({ ok: true, sent, expired });
     }
 
     // -------- 4. Админ: товары --------
@@ -758,6 +819,16 @@ Deno.serve(async (req) => {
         if (!body.id || !allowed.includes(body.status)) {
           return json({ error: "bad params" }, 400);
         }
+
+        // При отмене неоплаченной заявки — вернуть остаток на склад
+        if (body.status === "canceled") {
+          const { data: r } = await supabase
+            .from("requests")
+            .select("id, is_paid, stock_returned, items:request_items(product_id, qty)")
+            .eq("id", body.id).single();
+          if (r && !r.is_paid) await returnStock(r);
+        }
+
         const { data, error } = await supabase
           .from("requests").update({ status: body.status })
           .eq("id", body.id).select().single();

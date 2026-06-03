@@ -81,6 +81,7 @@ create table if not exists public.requests (
   paid_at             timestamptz,
   reminder_count      int not null default 0,
   last_reminder_at    timestamptz,
+  stock_returned      boolean not null default false,
   created_at          timestamptz not null default now()
 );
 
@@ -97,6 +98,16 @@ create table if not exists public.request_items (
 create index if not exists idx_request_items_request on public.request_items(request_id);
 create index if not exists idx_products_active on public.products(is_active, sort_order);
 create index if not exists idx_products_category on public.products(category_id);
+
+-- Атомарное изменение остатка (резерв при заказе / возврат при отмене)
+create or replace function public.adjust_stock(pid uuid, delta int)
+returns void
+language sql
+as $$
+  update public.products
+     set stock = greatest(coalesce(stock, 0) + delta, 0)
+   where id = pid and stock is not null;
+$$;
 
 -- ============================================================
 --  RLS (Row Level Security)
