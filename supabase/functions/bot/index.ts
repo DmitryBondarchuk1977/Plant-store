@@ -261,6 +261,8 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
 
       // Уведомление клиенту о смене статуса
+      let notified = false;
+      let notifyError: string | undefined;
       if (data?.telegram_id) {
         const labels: Record<string, string> = {
           new: "принята ✅",
@@ -268,14 +270,44 @@ Deno.serve(async (req) => {
           done: "выполнена 🎉",
           canceled: "отменена ❌",
         };
-        try {
-          await tg("sendMessage", {
-            chat_id: data.telegram_id,
-            text: `Ваша заявка #${data.id} — ${labels[body.status] || body.status}.`,
-          });
-        } catch (_e) { /* */ }
+        const res = await tg("sendMessage", {
+          chat_id: data.telegram_id,
+          text: `Ваша заявка #${data.id} — ${labels[body.status] || body.status}.`,
+        });
+        notified = !!res?.ok;
+        if (!res?.ok) notifyError = res?.description || "не доставлено";
+      } else {
+        notifyError = "у заявки нет telegram_id";
       }
-      return json({ request: data });
+      return json({ request: data, notified, notify_error: notifyError });
+    }
+
+    // -------- Веб-админка: ручная отметка оплаты (+уведомление клиенту) --------
+    if (path === "/admin-web/request-paid" && req.method === "POST") {
+      const adminEmail = await getWebAdminEmail(req);
+      if (!adminEmail) return json({ error: "forbidden" }, 403);
+      const body = await req.json();
+      if (!body.id || typeof body.paid !== "boolean") {
+        return json({ error: "bad params" }, 400);
+      }
+      const upd = body.paid
+        ? { is_paid: true, payment_status: "manual", paid_at: new Date().toISOString() }
+        : { is_paid: false, payment_status: null, paid_at: null };
+      const { data, error } = await supabase
+        .from("requests").update(upd).eq("id", body.id).select().single();
+      if (error) return json({ error: error.message }, 500);
+
+      let notified = false;
+      let notifyError: string | undefined;
+      if (body.paid && data?.telegram_id) {
+        const res = await tg("sendMessage", {
+          chat_id: data.telegram_id,
+          text: `✅ Оплата заявки #${data.id} подтверждена. Спасибо!`,
+        });
+        notified = !!res?.ok;
+        if (!res?.ok) notifyError = res?.description || "не доставлено";
+      }
+      return json({ request: data, notified, notify_error: notifyError });
     }
 
     // -------- 1. Вебхук Telegram --------

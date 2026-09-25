@@ -29,6 +29,7 @@ export function RequestsView() {
   const [items, setItems] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | RequestStatus>('all')
   const [search, setSearch] = useState('')
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -75,9 +76,15 @@ export function RequestsView() {
     )
       return
     setBusyId(r.id)
+    setNotice(null)
     try {
-      await setRequestStatus(r, status)
+      const res = await setRequestStatus(r, status)
       await load()
+      setNotice(
+        res.notified
+          ? `Статус изменён, клиенту отправлено уведомление ✓`
+          : `Статус изменён, но уведомление клиенту не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -86,10 +93,19 @@ export function RequestsView() {
   }
 
   async function togglePaid(r: Request) {
+    const willPay = !r.is_paid
     setBusyId(r.id)
+    setNotice(null)
     try {
-      await setRequestPaid(r.id, !r.is_paid)
+      const res = await setRequestPaid(r.id, willPay)
       await load()
+      if (willPay) {
+        setNotice(
+          res.notified
+            ? `Оплата отмечена, клиенту отправлено уведомление ✓`
+            : `Оплата отмечена, но уведомление не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
+        )
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -130,6 +146,7 @@ export function RequestsView() {
       </div>
 
       {error && <div className="error banner">{error}</div>}
+      {notice && <div className="banner notice-banner">{notice}</div>}
 
       {loading ? (
         <div className="muted pad">Загрузка…</div>

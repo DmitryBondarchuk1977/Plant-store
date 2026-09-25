@@ -500,3 +500,5 @@ td.editable { white-space: nowrap; }
 .ud-ok { color: var(--primary); font-size: 13px; }
 .ud-orders-title { font-weight: 600; font-size: 14px; margin-top: 4px; }
 a.btn { text-decoration: none; display: inline-block; }
+
+.notice-banner { border-color: var(--primary); background: var(--active); color: var(--text); }

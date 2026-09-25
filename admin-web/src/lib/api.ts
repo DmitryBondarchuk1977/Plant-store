@@ -273,20 +273,26 @@ export async function getRequests(): Promise<Request[]> {
   return (data ?? []) as Request[]
 }
 
+/** Результат доставки уведомления клиенту. */
+export type NotifyResult = { notified: boolean; notify_error?: string }
+
 /**
  * Смена статуса — через Edge Function: возврат остатка при отмене
  * и уведомление клиенту в Telegram делаются на сервере (у бота есть токен).
  */
-export async function setRequestStatus(req: Request, status: RequestStatus) {
-  await callAdminFn('/admin-web/request-status', { id: req.id, status })
+export async function setRequestStatus(
+  req: Request,
+  status: RequestStatus,
+): Promise<NotifyResult> {
+  return await callAdminFn<NotifyResult>('/admin-web/request-status', {
+    id: req.id,
+    status,
+  })
 }
 
-export async function setRequestPaid(id: number, paid: boolean) {
-  const patch = paid
-    ? { is_paid: true, payment_status: 'manual', paid_at: new Date().toISOString() }
-    : { is_paid: false, payment_status: null, paid_at: null }
-  const { error } = await supabase.from('requests').update(patch).eq('id', id)
-  if (error) throw error
+/** Ручная отметка оплаты — через Edge Function (при оплате шлём клиенту уведомление). */
+export async function setRequestPaid(id: number, paid: boolean): Promise<NotifyResult> {
+  return await callAdminFn<NotifyResult>('/admin-web/request-paid', { id, paid })
 }
 
 // ---------- Загрузка картинок в Storage ----------
