@@ -236,6 +236,48 @@ Deno.serve(async (req) => {
       return json({ error: res?.description || "send failed" }, 400);
     }
 
+    // -------- Веб-админка: смена статуса заявки (+возврат остатка, +уведомление клиенту) --------
+    if (path === "/admin-web/request-status" && req.method === "POST") {
+      const adminEmail = await getWebAdminEmail(req);
+      if (!adminEmail) return json({ error: "forbidden" }, 403);
+      const body = await req.json();
+      const allowed = ["new", "in_progress", "done", "canceled"];
+      if (!body.id || !allowed.includes(body.status)) {
+        return json({ error: "bad params" }, 400);
+      }
+
+      // При отмене неоплаченной заявки — вернуть остаток на склад
+      if (body.status === "canceled") {
+        const { data: r } = await supabase
+          .from("requests")
+          .select("id, is_paid, stock_returned, items:request_items(product_id, qty)")
+          .eq("id", body.id).single();
+        if (r && !r.is_paid) await returnStock(r);
+      }
+
+      const { data, error } = await supabase
+        .from("requests").update({ status: body.status })
+        .eq("id", body.id).select().single();
+      if (error) return json({ error: error.message }, 500);
+
+      // Уведомление клиенту о смене статуса
+      if (data?.telegram_id) {
+        const labels: Record<string, string> = {
+          new: "принята ✅",
+          in_progress: "в работе 🛠",
+          done: "выполнена 🎉",
+          canceled: "отменена ❌",
+        };
+        try {
+          await tg("sendMessage", {
+            chat_id: data.telegram_id,
+            text: `Ваша заявка #${data.id} — ${labels[body.status] || body.status}.`,
+          });
+        } catch (_e) { /* */ }
+      }
+      return json({ request: data });
+    }
+
     // -------- 1. Вебхук Telegram --------
     if (path === "/webhook" && req.method === "POST") {
       const update = await req.json();

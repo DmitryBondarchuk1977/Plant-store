@@ -178,24 +178,33 @@ export async function getUserRequests(telegramId: number): Promise<Request[]> {
   return (data ?? []) as Request[]
 }
 
-/** Отправка сообщения пользователю через бота (Edge Function, авторизация по токену админа). */
-export async function sendBotMessage(telegramId: number, text: string): Promise<void> {
+/** Вызов защищённого роута Edge Function с авторизацией по токену админа. */
+async function callAdminFn<T = unknown>(
+  routePath: string,
+  body: unknown,
+): Promise<T> {
   const base = (import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('Нет сессии')
-  const res = await fetch(`${base}/functions/v1/bot/admin-web/send-message`, {
+  const res = await fetch(`${base}/functions/v1/bot${routePath}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ telegram_id: telegramId, text }),
+    body: JSON.stringify(body),
   })
   const out = await res.json().catch(() => ({}))
-  if (!res.ok || !out?.ok) {
-    throw new Error(out?.error || `Ошибка отправки (${res.status})`)
+  if (!res.ok || out?.error) {
+    throw new Error(out?.error || `Ошибка запроса (${res.status})`)
   }
+  return out as T
+}
+
+/** Отправка сообщения пользователю через бота. */
+export async function sendBotMessage(telegramId: number, text: string): Promise<void> {
+  await callAdminFn('/admin-web/send-message', { telegram_id: telegramId, text })
 }
 
 /** Статистика заявок по каждому telegram_id: всего заявок, сумма выполненных. */
@@ -264,21 +273,12 @@ export async function getRequests(): Promise<Request[]> {
   return (data ?? []) as Request[]
 }
 
-/** Смена статуса. При отмене неоплаченной заявки возвращаем остаток на склад. */
+/**
+ * Смена статуса — через Edge Function: возврат остатка при отмене
+ * и уведомление клиенту в Telegram делаются на сервере (у бота есть токен).
+ */
 export async function setRequestStatus(req: Request, status: RequestStatus) {
-  if (status === 'canceled' && !req.is_paid && !req.stock_returned) {
-    for (const it of req.items) {
-      if (it.product_id) {
-        await supabase.rpc('adjust_stock', { pid: it.product_id, delta: it.qty })
-      }
-    }
-    await supabase.from('requests').update({ stock_returned: true }).eq('id', req.id)
-  }
-  const { error } = await supabase
-    .from('requests')
-    .update({ status })
-    .eq('id', req.id)
-  if (error) throw error
+  await callAdminFn('/admin-web/request-status', { id: req.id, status })
 }
 
 export async function setRequestPaid(id: number, paid: boolean) {
