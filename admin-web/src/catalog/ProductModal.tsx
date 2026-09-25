@@ -8,6 +8,7 @@ import {
   type ProductInput,
 } from '../lib/api'
 import { Modal } from '../ui/Modal'
+import { errMsg } from '../lib/errors'
 
 type Props = {
   product: Product | null // null = создание
@@ -84,7 +85,7 @@ export function ProductModal({
       }
       setImages((prev) => [...prev, ...urls])
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setErr(errMsg(e))
     } finally {
       setUploading(false)
     }
@@ -136,7 +137,7 @@ export function ProductModal({
       else await createProduct(input)
       onSaved()
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setErr(errMsg(e))
       setBusy(false)
     }
   }
@@ -149,7 +150,7 @@ export function ProductModal({
       await deleteProduct(product.id)
       onDeleted()
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setErr(errMsg(e))
       setBusy(false)
     }
   }

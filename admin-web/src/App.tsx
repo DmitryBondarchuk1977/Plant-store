@@ -3,10 +3,11 @@ import { useAuth } from './auth/AuthProvider'
 import { Login } from './auth/Login'
 import { CatalogTable } from './catalog/CatalogTable'
 import { Menu, type MenuItem } from './ui/Menu'
-import { Placeholder } from './views/Placeholder'
 import { RequestsView } from './views/RequestsView'
 import { AnnouncementsView } from './views/AnnouncementsView'
 import { UsersView } from './views/UsersView'
+import { AnalyticsView } from './views/AnalyticsView'
+import { SettingsView } from './views/SettingsView'
 
 type Theme = 'light' | 'dark'
 type View =
@@ -117,18 +118,8 @@ export default function App() {
         {view === 'requests' && <RequestsView />}
         {view === 'announcements' && <AnnouncementsView />}
         {view === 'users' && <UsersView />}
-        {view === 'analytics' && (
-          <Placeholder
-            title="Аналитика"
-            note="Продажи и маржа по категориям, топ растений — добавим на следующем шаге."
-          />
-        )}
-        {view === 'settings' && (
-          <Placeholder
-            title="Настройки"
-            note="Администраторы, тема и прочие параметры — добавим на следующем шаге."
-          />
-        )}
+        {view === 'analytics' && <AnalyticsView />}
+        {view === 'settings' && <SettingsView />}
       </main>
     </div>
   )

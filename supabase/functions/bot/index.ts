@@ -416,12 +416,22 @@ Deno.serve(async (req) => {
       const { data } = await supabase
         .from("app_users").select("phone, first_name, last_name")
         .eq("telegram_id", u.id).maybeSingle();
+      const [pmOnline, pmCash, pmCard] = await Promise.all([
+        getSetting("pm_online_enabled", "true"),
+        getSetting("pm_cash_enabled", "true"),
+        getSetting("pm_card_enabled", "true"),
+      ]);
       return json({
         telegram_id: u.id,
         first_name: u.first_name ?? data?.first_name ?? "",
         last_name: u.last_name ?? data?.last_name ?? "",
         phone: data?.phone ?? "",
         is_admin: isAdmin(u.id),
+        payments: {
+          online: pmOnline !== "false",
+          cash: pmCash !== "false",
+          card: pmCard !== "false",
+        },
       });
     }
 

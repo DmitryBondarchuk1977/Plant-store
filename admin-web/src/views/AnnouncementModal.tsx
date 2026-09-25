@@ -7,6 +7,7 @@ import {
   uploadImage,
 } from '../lib/api'
 import { Modal } from '../ui/Modal'
+import { errMsg } from '../lib/errors'
 
 export function AnnouncementModal({
   item,
@@ -34,7 +35,7 @@ export function AnnouncementModal({
     try {
       setImage(await uploadImage(f))
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setErr(errMsg(e))
     } finally {
       setUploading(false)
     }
@@ -49,7 +50,7 @@ export function AnnouncementModal({
       else await createAnnouncement(input)
       onSaved()
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setErr(errMsg(e))
       setBusy(false)
     }
   }
@@ -62,7 +63,7 @@ export function AnnouncementModal({
       await deleteAnnouncement(item.id)
       onDeleted()
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setErr(errMsg(e))
       setBusy(false)
     }
   }

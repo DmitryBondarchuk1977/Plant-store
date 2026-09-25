@@ -9,6 +9,7 @@ import {
   deleteSubcategory,
 } from '../lib/api'
 import { Modal } from '../ui/Modal'
+import { errMsg } from '../lib/errors'
 
 type Props = {
   categories: Category[]
@@ -38,7 +39,7 @@ export function CategoriesManager({
       await fn()
       await onChanged()
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setErr(errMsg(e))
     } finally {
       setBusy(false)
     }

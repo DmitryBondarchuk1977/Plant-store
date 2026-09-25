@@ -3,6 +3,7 @@ import type { AppUser } from '../lib/types'
 import { getUsers, getUserStats, type UserStat } from '../lib/api'
 import { byn } from '../lib/format'
 import { UserDetail } from './UserDetail'
+import { errMsg } from '../lib/errors'
 
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('ru-RU', {
@@ -27,7 +28,7 @@ export function UsersView() {
       setUsers(u)
       setStats(s)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     } finally {
       setLoading(false)
     }

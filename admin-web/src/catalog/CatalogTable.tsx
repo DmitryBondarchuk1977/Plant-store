@@ -5,6 +5,7 @@ import { byn, num } from '../lib/format'
 import { ProductModal } from './ProductModal'
 import { CategoriesManager } from './CategoriesManager'
 import { QuickEditModal } from './QuickEditModal'
+import { errMsg } from '../lib/errors'
 
 type SortKey =
   | 'article'
@@ -66,7 +67,7 @@ export function CatalogTable() {
       setSubcategories(subs)
       setProducts(prods)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     } finally {
       setLoading(false)
     }

@@ -5,16 +5,18 @@ export function Modal({
   onClose,
   children,
   wide = false,
+  xwide = false,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
   wide?: boolean
+  xwide?: boolean
 }) {
   return (
     <div className="overlay" onClick={onClose}>
       <div
-        className={'modal' + (wide ? ' modal-wide' : '')}
+        className={'modal' + (xwide ? ' modal-xwide' : wide ? ' modal-wide' : '')}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">

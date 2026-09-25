@@ -7,6 +7,7 @@ import type {
   RequestStatus,
   Announcement,
   AppUser,
+  Admin,
 } from './types'
 
 export async function getCategories(): Promise<Category[]> {
@@ -107,6 +108,19 @@ export async function deleteProduct(id: string): Promise<void> {
   if (error) throw error
 }
 
+/** Ручные продажи товара для аналитики (складываются с расчётом из заявок). */
+export async function updateManualSales(
+  id: string,
+  sold_manual: number,
+  revenue_manual: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from('products')
+    .update({ sold_manual, revenue_manual })
+    .eq('id', id)
+  if (error) throw error
+}
+
 // ---------- Категории ----------
 
 export async function createCategory(name: string, image_url: string | null) {
@@ -165,6 +179,17 @@ export async function getUsers(): Promise<AppUser[]> {
     .order('created_at', { ascending: false })
   if (error) throw error
   return (data ?? []) as AppUser[]
+}
+
+/** Пользователь по telegram_id (для перехода из заявки в карточку клиента). */
+export async function getAppUser(telegramId: number): Promise<AppUser | null> {
+  const { data, error } = await supabase
+    .from('app_users')
+    .select('*')
+    .eq('telegram_id', telegramId)
+    .maybeSingle()
+  if (error) throw error
+  return (data as AppUser) ?? null
 }
 
 /** Заявки конкретного пользователя (с позициями). */
@@ -319,4 +344,72 @@ export async function uploadImage(file: File): Promise<string> {
   if (error) throw error
   const { data } = supabase.storage.from('product-images').getPublicUrl(path)
   return data.publicUrl
+}
+
+// ---------- Настройки бота ----------
+
+export type BotSettings = {
+  start_message: string
+  start_button: string
+  card_details: string
+  pm_online: boolean
+  pm_cash: boolean
+  pm_card: boolean
+}
+
+export async function getBotSettings(): Promise<BotSettings> {
+  const { data, error } = await supabase.from('settings').select('key, value')
+  if (error) throw error
+  const map = new Map<string, string>()
+  ;(data ?? []).forEach((r: { key: string; value: string | null }) =>
+    map.set(r.key, r.value ?? ''),
+  )
+  return {
+    start_message: map.get('start_message') ?? '',
+    start_button: map.get('start_button') ?? '',
+    card_details: map.get('card_details') ?? '',
+    pm_online: map.get('pm_online_enabled') !== 'false',
+    pm_cash: map.get('pm_cash_enabled') !== 'false',
+    pm_card: map.get('pm_card_enabled') !== 'false',
+  }
+}
+
+export async function saveBotSettings(s: BotSettings): Promise<void> {
+  const rows = [
+    { key: 'start_message', value: s.start_message },
+    { key: 'start_button', value: s.start_button },
+    { key: 'card_details', value: s.card_details },
+    { key: 'pm_online_enabled', value: s.pm_online ? 'true' : 'false' },
+    { key: 'pm_cash_enabled', value: s.pm_cash ? 'true' : 'false' },
+    { key: 'pm_card_enabled', value: s.pm_card ? 'true' : 'false' },
+  ]
+  const { error } = await supabase.from('settings').upsert(rows, { onConflict: 'key' })
+  if (error) throw error
+}
+
+// ---------- Администраторы ----------
+
+export async function getAdmins(): Promise<Admin[]> {
+  const { data, error } = await supabase
+    .from('admins')
+    .select('*')
+    .order('created_at')
+  if (error) throw error
+  return (data ?? []) as Admin[]
+}
+
+export async function addAdmin(
+  email: string,
+  telegram_id: number | null,
+  name: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('admins')
+    .insert({ email: email.toLowerCase(), telegram_id, name })
+  if (error) throw error
+}
+
+export async function deleteAdmin(id: number): Promise<void> {
+  const { error } = await supabase.from('admins').delete().eq('id', id)
+  if (error) throw error
 }

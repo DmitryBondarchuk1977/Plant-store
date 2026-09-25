@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Request, RequestStatus } from '../lib/types'
-import { getRequests, setRequestStatus, setRequestPaid } from '../lib/api'
+import type { Request, RequestStatus, AppUser } from '../lib/types'
+import {
+  getRequests,
+  setRequestStatus,
+  setRequestPaid,
+  addRequestItem,
+  getAppUser,
+} from '../lib/api'
 import { byn } from '../lib/format'
+import { ProductPicker } from './ProductPicker'
+import { UserDetail } from './UserDetail'
+import { errMsg } from '../lib/errors'
 
 const STATUS: { key: RequestStatus; label: string }[] = [
   { key: 'new', label: 'Новая' },
@@ -15,6 +24,7 @@ const STATUS_LABEL: Record<RequestStatus, string> = {
   done: 'Выполнена',
   canceled: 'Отмена',
 }
+const canEdit = (s: RequestStatus) => s === 'new' || s === 'in_progress'
 
 const fmtDate = (s: string) =>
   new Date(s).toLocaleString('ru-RU', {
@@ -33,6 +43,9 @@ export function RequestsView() {
   const [filter, setFilter] = useState<'all' | RequestStatus>('all')
   const [search, setSearch] = useState('')
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [picking, setPicking] = useState<Request | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [viewUser, setViewUser] = useState<AppUser | null>(null)
 
   async function load() {
     setLoading(true)
@@ -40,7 +53,7 @@ export function RequestsView() {
     try {
       setItems(await getRequests())
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     } finally {
       setLoading(false)
     }
@@ -86,9 +99,49 @@ export function RequestsView() {
           : `Статус изменён, но уведомление клиенту не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     } finally {
       setBusyId(null)
+    }
+  }
+
+  async function openUser(r: Request) {
+    if (!r.telegram_id) return
+    try {
+      const u = await getAppUser(r.telegram_id)
+      setViewUser(
+        u ?? {
+          telegram_id: r.telegram_id,
+          first_name: r.customer_first_name,
+          last_name: r.customer_last_name,
+          username: null,
+          phone: r.phone,
+          created_at: r.created_at,
+          updated_at: r.created_at,
+        },
+      )
+    } catch (e) {
+      setError(errMsg(e))
+    }
+  }
+
+  async function addItem(productId: string, qty: number) {
+    if (!picking) return
+    setAdding(true)
+    setNotice(null)
+    try {
+      const res = await addRequestItem(picking.id, productId, qty)
+      setItems((list) => list.map((o) => (o.id === res.request.id ? res.request : o)))
+      setPicking(null)
+      setNotice(
+        res.notified
+          ? 'Позиция добавлена, клиенту отправлено уведомление ✓'
+          : `Позиция добавлена, но уведомление не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
+      )
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setAdding(false)
     }
   }
 
@@ -107,7 +160,7 @@ export function RequestsView() {
         )
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     } finally {
       setBusyId(null)
     }
@@ -155,7 +208,12 @@ export function RequestsView() {
       ) : (
         <div className="req-list">
           {rows.map((r) => (
-            <div key={r.id} className={'req-card st-' + r.status}>
+            <div
+              key={r.id}
+              className={'req-card clickable st-' + r.status}
+              onClick={() => openUser(r)}
+              title={r.telegram_id ? 'Открыть карточку клиента' : undefined}
+            >
               <div className="req-head">
                 <div className="req-id">
                   #{r.id}
@@ -172,7 +230,11 @@ export function RequestsView() {
                   {(r.customer_first_name ?? '') + ' ' + (r.customer_last_name ?? '')}
                 </b>
                 {r.phone && (
-                  <a className="req-phone" href={`tel:${r.phone}`}>
+                  <a
+                    className="req-phone"
+                    href={`tel:${r.phone}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {r.phone}
                   </a>
                 )}
@@ -193,7 +255,7 @@ export function RequestsView() {
 
               <div className="req-foot">
                 <div className="req-total">Итого: {byn(r.total)}</div>
-                <div className="req-actions">
+                <div className="req-actions" onClick={(e) => e.stopPropagation()}>
                   <select
                     className="input select-sm"
                     value={r.status}
@@ -213,11 +275,38 @@ export function RequestsView() {
                   >
                     {r.is_paid ? 'Снять оплату' : 'Отметить оплату'}
                   </button>
+                  {canEdit(r.status) && (
+                    <button
+                      className="btn btn-sm"
+                      disabled={busyId === r.id}
+                      onClick={() => setPicking(r)}
+                    >
+                      + Позиция
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {picking && (
+        <ProductPicker
+          busy={adding}
+          onClose={() => setPicking(null)}
+          onAdd={addItem}
+        />
+      )}
+
+      {viewUser && (
+        <UserDetail
+          user={viewUser}
+          onClose={() => {
+            setViewUser(null)
+            load()
+          }}
+        />
       )}
     </div>
   )

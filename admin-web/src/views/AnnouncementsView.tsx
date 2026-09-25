@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Announcement } from '../lib/types'
 import { getAnnouncements, updateAnnouncement } from '../lib/api'
 import { AnnouncementModal } from './AnnouncementModal'
+import { errMsg } from '../lib/errors'
 
 export function AnnouncementsView() {
   const [items, setItems] = useState<Announcement[]>([])
@@ -15,7 +16,7 @@ export function AnnouncementsView() {
     try {
       setItems(await getAnnouncements())
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     } finally {
       setLoading(false)
     }
@@ -32,7 +33,7 @@ export function AnnouncementsView() {
         list.map((x) => (x.id === a.id ? { ...x, is_active: !x.is_active } : x)),
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     }
   }
 

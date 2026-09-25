@@ -9,6 +9,7 @@ import {
 import { byn } from '../lib/format'
 import { Modal } from '../ui/Modal'
 import { ProductPicker } from './ProductPicker'
+import { errMsg } from '../lib/errors'
 
 const STATUS: { key: RequestStatus; label: string }[] = [
   { key: 'new', label: 'Новая' },
@@ -53,7 +54,7 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
     try {
       setOrders(await getUserRequests(user.telegram_id))
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     }
   }
 
@@ -61,7 +62,7 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
     let active = true
     getUserRequests(user.telegram_id)
       .then((r) => active && setOrders(r))
-      .catch((e) => active && setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => active && setError(errMsg(e)))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -82,7 +83,7 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
       setSent(true)
       setMsg('')
     } catch (e) {
-      setSendErr(e instanceof Error ? e.message : String(e))
+      setSendErr(errMsg(e))
     } finally {
       setSending(false)
     }
@@ -106,7 +107,7 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
           : `Статус изменён, но уведомление не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     } finally {
       setBusyId(null)
     }
@@ -127,7 +128,7 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
           : `Позиция добавлена, но уведомление не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errMsg(e))
     } finally {
       setAdding(false)
     }

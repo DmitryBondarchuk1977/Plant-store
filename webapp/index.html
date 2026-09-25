@@ -1213,6 +1213,17 @@ async function submitRequest(){
     tg?.HapticFeedback?.notificationOccurred?.("success");
     payRequestId = res.request_id;
     payRequestTotal = totalBefore;
+    // видимость способов оплаты (управляется из настроек админки)
+    const pm = ME.payments || { online:true, cash:true, card:true };
+    $("pm-online").classList.toggle("hidden", pm.online === false);
+    $("pm-cash").classList.toggle("hidden",   pm.cash   === false);
+    $("pm-card").classList.toggle("hidden",   pm.card   === false);
+    const anyPm = pm.online !== false || pm.cash !== false || pm.card !== false;
+    if(!anyPm){
+      tg?.showAlert?.("Заявка оформлена. Мы свяжемся с вами.");
+      show("orders"); loadOrders();
+      return;
+    }
     $("pm-sub").textContent = `Заявка #${payRequestId} оформлена. Выберите, как оплатить.`;
     $("pm-card-details").classList.add("hidden");
     $("pm-card-details").textContent = "";

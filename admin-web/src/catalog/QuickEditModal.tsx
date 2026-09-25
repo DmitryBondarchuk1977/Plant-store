@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Product } from '../lib/types'
 import { updateProduct } from '../lib/api'
 import { Modal } from '../ui/Modal'
+import { errMsg } from '../lib/errors'
 
 const numOrNull = (s: string): number | null => {
   const t = s.trim().replace(',', '.')
@@ -48,7 +49,7 @@ export function QuickEditModal({
       })
       onSaved(updated)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setErr(errMsg(e))
       setBusy(false)
     }
   }

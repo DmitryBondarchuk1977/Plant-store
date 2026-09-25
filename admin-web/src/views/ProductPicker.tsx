@@ -3,6 +3,7 @@ import type { Product } from '../lib/types'
 import { getProducts } from '../lib/api'
 import { byn } from '../lib/format'
 import { Modal } from '../ui/Modal'
+import { errMsg } from '../lib/errors'
 
 export function ProductPicker({
   onClose,
@@ -24,7 +25,7 @@ export function ProductPicker({
     let active = true
     getProducts()
       .then((p) => active && setProducts(p.filter((x) => x.is_active)))
-      .catch((e) => active && setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => active && setError(errMsg(e)))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
