@@ -295,6 +295,18 @@ export async function setRequestPaid(id: number, paid: boolean): Promise<NotifyR
   return await callAdminFn<NotifyResult>('/admin-web/request-paid', { id, paid })
 }
 
+/** Добавить позицию в заявку — через Edge Function (пересчёт суммы + уведомление). */
+export async function addRequestItem(
+  requestId: number,
+  productId: string,
+  qty: number,
+): Promise<NotifyResult & { request: Request }> {
+  return await callAdminFn<NotifyResult & { request: Request }>(
+    '/admin-web/request-add-item',
+    { request_id: requestId, product_id: productId, qty },
+  )
+}
+
 // ---------- Загрузка картинок в Storage ----------
 
 export async function uploadImage(file: File): Promise<string> {

@@ -502,3 +502,38 @@ td.editable { white-space: nowrap; }
 a.btn { text-decoration: none; display: inline-block; }
 
 .notice-banner { border-color: var(--primary); background: var(--active); color: var(--text); }
+
+/* ===== Попап выбора товара ===== */
+.picker { display: flex; flex-direction: column; gap: 10px; }
+.picker-list {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.picker-item:last-child { border-bottom: none; }
+.picker-item:hover { background: var(--hover); }
+.picker-item.active { background: var(--active); }
+.picker-name { font-size: 14px; }
+.picker-meta { display: flex; gap: 12px; align-items: baseline; white-space: nowrap; }
+.out-text { color: var(--danger); }
+.picker-foot {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  flex-wrap: wrap;
+}
+.picker-selected { flex: 1 1 auto; font-size: 14px; }
+.picker-qty { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.picker-qty .input { width: 80px; }

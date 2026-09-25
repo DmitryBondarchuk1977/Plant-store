@@ -310,6 +310,66 @@ Deno.serve(async (req) => {
       return json({ request: data, notified, notify_error: notifyError });
     }
 
+    // -------- Веб-админка: добавить позицию в заявку (пересчёт суммы, резерв, уведомление) --------
+    if (path === "/admin-web/request-add-item" && req.method === "POST") {
+      const adminEmail = await getWebAdminEmail(req);
+      if (!adminEmail) return json({ error: "forbidden" }, 403);
+      const body = await req.json();
+      const requestId = Number(body.request_id);
+      const productId = String(body.product_id ?? "");
+      const qty = Math.max(1, Math.round(Number(body.qty) || 1));
+      if (!requestId || !productId) return json({ error: "bad params" }, 400);
+
+      // Заявка должна быть в статусе «Новая» или «В работе»
+      const { data: reqRow, error: reqErr } = await supabase
+        .from("requests").select("id, status, telegram_id").eq("id", requestId).single();
+      if (reqErr || !reqRow) return json({ error: "request not found" }, 404);
+      if (!["new", "in_progress"].includes(reqRow.status)) {
+        return json({ error: "Позиции можно добавлять только в заявки «Новая» и «В работе»" }, 400);
+      }
+
+      // Товар (цена фиксируется на момент добавления)
+      const { data: prod, error: prodErr } = await supabase
+        .from("products").select("id, name, price").eq("id", productId).single();
+      if (prodErr || !prod) return json({ error: "product not found" }, 404);
+
+      const { error: insErr } = await supabase.from("request_items").insert({
+        request_id: requestId,
+        product_id: prod.id,
+        product_name: prod.name,
+        price: prod.price,
+        qty,
+      });
+      if (insErr) return json({ error: insErr.message }, 500);
+
+      // Резерв остатка (если он ограничен; для NULL-остатка ничего не делает)
+      await supabase.rpc("adjust_stock", { pid: prod.id, delta: -qty });
+
+      // Пересчёт суммы заявки
+      const { data: items } = await supabase
+        .from("request_items").select("price, qty").eq("request_id", requestId);
+      const total = (items ?? []).reduce(
+        (s: number, i: { price: number; qty: number }) => s + Number(i.price) * Number(i.qty), 0);
+      const { data: updated, error: updErr } = await supabase
+        .from("requests").update({ total })
+        .eq("id", requestId)
+        .select("*, items:request_items(*)").single();
+      if (updErr) return json({ error: updErr.message }, 500);
+
+      // Уведомление клиенту
+      let notified = false;
+      let notifyError: string | undefined;
+      if (reqRow.telegram_id) {
+        const res = await tg("sendMessage", {
+          chat_id: reqRow.telegram_id,
+          text: `В вашу заявку #${requestId} добавлено: ${prod.name} × ${qty}. Итого: ${total} Br.`,
+        });
+        notified = !!res?.ok;
+        if (!res?.ok) notifyError = res?.description || "не доставлено";
+      }
+      return json({ request: updated, notified, notify_error: notifyError });
+    }
+
     // -------- 1. Вебхук Telegram --------
     if (path === "/webhook" && req.method === "POST") {
       const update = await req.json();

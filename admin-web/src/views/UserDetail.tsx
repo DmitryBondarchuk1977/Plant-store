@@ -1,15 +1,29 @@
 import { useEffect, useState } from 'react'
 import type { AppUser, Request, RequestStatus } from '../lib/types'
-import { getUserRequests, sendBotMessage } from '../lib/api'
+import {
+  getUserRequests,
+  sendBotMessage,
+  setRequestStatus,
+  addRequestItem,
+} from '../lib/api'
 import { byn } from '../lib/format'
 import { Modal } from '../ui/Modal'
+import { ProductPicker } from './ProductPicker'
 
+const STATUS: { key: RequestStatus; label: string }[] = [
+  { key: 'new', label: 'Новая' },
+  { key: 'in_progress', label: 'В работе' },
+  { key: 'done', label: 'Выполнена' },
+  { key: 'canceled', label: 'Отмена' },
+]
 const STATUS_LABEL: Record<RequestStatus, string> = {
   new: 'Новая',
   in_progress: 'В работе',
   done: 'Выполнена',
   canceled: 'Отмена',
 }
+const canEdit = (s: RequestStatus) => s === 'new' || s === 'in_progress'
+
 const fmtDate = (s: string) =>
   new Date(s).toLocaleString('ru-RU', {
     day: '2-digit',
@@ -23,12 +37,25 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
   const [orders, setOrders] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const [compose, setCompose] = useState(false)
   const [msg, setMsg] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [sendErr, setSendErr] = useState<string | null>(null)
+
+  const [busyId, setBusyId] = useState<number | null>(null)
+  const [picking, setPicking] = useState<Request | null>(null)
+  const [adding, setAdding] = useState(false)
+
+  async function loadOrders() {
+    try {
+      setOrders(await getUserRequests(user.telegram_id))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -58,6 +85,51 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
       setSendErr(e instanceof Error ? e.message : String(e))
     } finally {
       setSending(false)
+    }
+  }
+
+  async function changeStatus(order: Request, status: RequestStatus) {
+    if (order.status === status) return
+    if (
+      status === 'canceled' &&
+      !confirm(`Отменить заявку #${order.id}? Остаток неоплаченной заявки вернётся на склад.`)
+    )
+      return
+    setBusyId(order.id)
+    setNotice(null)
+    try {
+      const res = await setRequestStatus(order, status)
+      await loadOrders()
+      setNotice(
+        res.notified
+          ? 'Статус изменён, клиенту отправлено уведомление ✓'
+          : `Статус изменён, но уведомление не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function addItem(productId: string, qty: number) {
+    if (!picking) return
+    setAdding(true)
+    setNotice(null)
+    try {
+      const res = await addRequestItem(picking.id, productId, qty)
+      // обновить эту заявку из ответа
+      setOrders((list) => list.map((o) => (o.id === res.request.id ? res.request : o)))
+      setPicking(null)
+      setNotice(
+        res.notified
+          ? 'Позиция добавлена, клиенту отправлено уведомление ✓'
+          : `Позиция добавлена, но уведомление не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAdding(false)
     }
   }
 
@@ -104,10 +176,7 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
               Нет username — прямой чат недоступен, но можно написать через бота
             </span>
           )}
-          <button
-            className="btn btn-sm btn-primary"
-            onClick={() => setCompose((v) => !v)}
-          >
+          <button className="btn btn-sm btn-primary" onClick={() => setCompose((v) => !v)}>
             ✉️ Написать через бота
           </button>
         </div>
@@ -133,18 +202,15 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
                 {sending ? 'Отправка…' : 'Отправить'}
               </button>
             </div>
-            <div className="muted small">
-              Бот сможет доставить сообщение, только если пользователь уже
-              запускал бота (нажимал Start / заходил в мини-апп).
-            </div>
           </div>
         )}
+
+        {error && <div className="error banner">{error}</div>}
+        {notice && <div className="banner notice-banner">{notice}</div>}
 
         <div className="ud-orders-title">Заказы</div>
         {loading ? (
           <div className="muted pad">Загрузка…</div>
-        ) : error ? (
-          <div className="error banner">{error}</div>
         ) : orders.length === 0 ? (
           <div className="muted pad">Заказов нет</div>
         ) : (
@@ -172,12 +238,45 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
                     </div>
                   ))}
                 </div>
-                <div className="req-total">Итого: {byn(r.total)}</div>
+                <div className="req-foot">
+                  <div className="req-total">Итого: {byn(r.total)}</div>
+                  {canEdit(r.status) && (
+                    <div className="req-actions">
+                      <select
+                        className="input select-sm"
+                        value={r.status}
+                        disabled={busyId === r.id}
+                        onChange={(e) => changeStatus(r, e.target.value as RequestStatus)}
+                      >
+                        {STATUS.map((s) => (
+                          <option key={s.key} value={s.key}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        disabled={busyId === r.id}
+                        onClick={() => setPicking(r)}
+                      >
+                        + Позиция
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {picking && (
+        <ProductPicker
+          busy={adding}
+          onClose={() => setPicking(null)}
+          onAdd={addItem}
+        />
+      )}
     </Modal>
   )
 }
