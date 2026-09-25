@@ -1,0 +1,304 @@
+import { supabase } from './supabase'
+import type {
+  Category,
+  Subcategory,
+  Product,
+  Request,
+  RequestStatus,
+  Announcement,
+  AppUser,
+} from './types'
+
+export async function getCategories(): Promise<Category[]> {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .order('sort_order')
+    .order('name')
+  if (error) throw error
+  return (data ?? []) as Category[]
+}
+
+export async function getSubcategories(): Promise<Subcategory[]> {
+  const { data, error } = await supabase
+    .from('subcategories')
+    .select('*')
+    .order('sort_order')
+    .order('name')
+  if (error) throw error
+  return (data ?? []) as Subcategory[]
+}
+
+export async function getProducts(): Promise<Product[]> {
+  // админ видит все товары, включая скрытые (is_active = false)
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .order('sort_order')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as Product[]
+}
+
+/** Быстрое изменение остатка прямо из таблицы. */
+export async function updateStock(id: string, stock: number | null) {
+  const { error } = await supabase.from('products').update({ stock }).eq('id', id)
+  if (error) throw error
+}
+
+/** Курс BYN за 100 RUB из settings (по умолчанию 3.8). */
+export async function getBynRate(): Promise<number> {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'byn_per_100_rub')
+    .maybeSingle()
+  if (error) throw error
+  const v = data?.value ? parseFloat(data.value) : 3.8
+  return Number.isFinite(v) ? v : 3.8
+}
+
+// ---------- Товары: создание / редактирование / удаление ----------
+
+export type ProductInput = {
+  name: string
+  description: string | null
+  price: number
+  cost_price: number | null
+  category_id: string | null
+  subcategory_id: string | null
+  stock: number | null
+  is_active: boolean
+  is_new: boolean
+  article: string | null
+  coef: number | null
+  rarity: number | null
+  prospect: number | null
+  image_url: string | null
+  images: string[]
+}
+
+export async function createProduct(input: ProductInput): Promise<Product> {
+  const { data, error } = await supabase
+    .from('products')
+    .insert(input)
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as Product
+}
+
+export async function updateProduct(
+  id: string,
+  patch: Partial<ProductInput>,
+): Promise<Product> {
+  const { data, error } = await supabase
+    .from('products')
+    .update(patch)
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as Product
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  const { error } = await supabase.from('products').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---------- Категории ----------
+
+export async function createCategory(name: string, image_url: string | null) {
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ name, image_url })
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as Category
+}
+
+export async function updateCategory(
+  id: string,
+  patch: Partial<Pick<Category, 'name' | 'image_url' | 'sort_order'>>,
+) {
+  const { error } = await supabase.from('categories').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteCategory(id: string) {
+  const { error } = await supabase.from('categories').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---------- Подкатегории ----------
+
+export async function createSubcategory(category_id: string, name: string) {
+  const { data, error } = await supabase
+    .from('subcategories')
+    .insert({ category_id, name })
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as Subcategory
+}
+
+export async function updateSubcategory(id: string, name: string) {
+  const { error } = await supabase.from('subcategories').update({ name }).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteSubcategory(id: string) {
+  const { error } = await supabase.from('subcategories').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---------- Пользователи ----------
+
+export type UserStat = { count: number; total: number; done: number }
+
+export async function getUsers(): Promise<AppUser[]> {
+  const { data, error } = await supabase
+    .from('app_users')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as AppUser[]
+}
+
+/** Заявки конкретного пользователя (с позициями). */
+export async function getUserRequests(telegramId: number): Promise<Request[]> {
+  const { data, error } = await supabase
+    .from('requests')
+    .select('*, items:request_items(*)')
+    .eq('telegram_id', telegramId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as Request[]
+}
+
+/** Отправка сообщения пользователю через бота (Edge Function, авторизация по токену админа). */
+export async function sendBotMessage(telegramId: number, text: string): Promise<void> {
+  const base = (import.meta.env.VITE_SUPABASE_URL as string).replace(/\/$/, '')
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('Нет сессии')
+  const res = await fetch(`${base}/functions/v1/bot/admin-web/send-message`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ telegram_id: telegramId, text }),
+  })
+  const out = await res.json().catch(() => ({}))
+  if (!res.ok || !out?.ok) {
+    throw new Error(out?.error || `Ошибка отправки (${res.status})`)
+  }
+}
+
+/** Статистика заявок по каждому telegram_id: всего заявок, сумма выполненных. */
+export async function getUserStats(): Promise<Map<number, UserStat>> {
+  const { data, error } = await supabase
+    .from('requests')
+    .select('telegram_id, total, status')
+  if (error) throw error
+  const m = new Map<number, UserStat>()
+  for (const r of data ?? []) {
+    const tid = (r as { telegram_id: number | null }).telegram_id
+    if (tid == null) continue
+    const cur = m.get(tid) ?? { count: 0, total: 0, done: 0 }
+    cur.count += 1
+    cur.total += Number((r as { total: number }).total) || 0
+    if ((r as { status: string }).status === 'done') {
+      cur.done += Number((r as { total: number }).total) || 0
+    }
+    m.set(tid, cur)
+  }
+  return m
+}
+
+// ---------- Анонсы ----------
+
+export async function getAnnouncements(): Promise<Announcement[]> {
+  const { data, error } = await supabase
+    .from('announcements')
+    .select('*')
+    .order('sort_order')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as Announcement[]
+}
+
+export type AnnouncementInput = {
+  title: string | null
+  image_url: string | null
+  is_active: boolean
+}
+
+export async function createAnnouncement(input: AnnouncementInput) {
+  const { error } = await supabase.from('announcements').insert(input)
+  if (error) throw error
+}
+
+export async function updateAnnouncement(id: string, patch: Partial<AnnouncementInput>) {
+  const { error } = await supabase.from('announcements').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteAnnouncement(id: string) {
+  const { error } = await supabase.from('announcements').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---------- Заявки ----------
+
+export async function getRequests(): Promise<Request[]> {
+  const { data, error } = await supabase
+    .from('requests')
+    .select('*, items:request_items(*)')
+    .order('created_at', { ascending: false })
+    .limit(500)
+  if (error) throw error
+  return (data ?? []) as Request[]
+}
+
+/** Смена статуса. При отмене неоплаченной заявки возвращаем остаток на склад. */
+export async function setRequestStatus(req: Request, status: RequestStatus) {
+  if (status === 'canceled' && !req.is_paid && !req.stock_returned) {
+    for (const it of req.items) {
+      if (it.product_id) {
+        await supabase.rpc('adjust_stock', { pid: it.product_id, delta: it.qty })
+      }
+    }
+    await supabase.from('requests').update({ stock_returned: true }).eq('id', req.id)
+  }
+  const { error } = await supabase
+    .from('requests')
+    .update({ status })
+    .eq('id', req.id)
+  if (error) throw error
+}
+
+export async function setRequestPaid(id: number, paid: boolean) {
+  const patch = paid
+    ? { is_paid: true, payment_status: 'manual', paid_at: new Date().toISOString() }
+    : { is_paid: false, payment_status: null, paid_at: null }
+  const { error } = await supabase.from('requests').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+// ---------- Загрузка картинок в Storage ----------
+
+export async function uploadImage(file: File): Promise<string> {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const rand = (globalThis.crypto?.randomUUID?.() ?? String(Date.now() + Math.random()))
+  const path = `products/${rand}.${ext}`
+  const { error } = await supabase.storage
+    .from('product-images')
+    .upload(path, file, { upsert: false, contentType: file.type || undefined })
+  if (error) throw error
+  const { data } = supabase.storage.from('product-images').getPublicUrl(path)
+  return data.publicUrl
+}

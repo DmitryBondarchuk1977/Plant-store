@@ -92,7 +92,7 @@ const enc = new TextEncoder();
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type, x-init-data",
+  "Access-Control-Allow-Headers": "content-type, x-init-data, authorization",
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
 };
 
@@ -164,6 +164,20 @@ async function getInitUser(req: Request): Promise<TgUser | null> {
   return null;
 }
 
+// Проверка админа веб-панели по Supabase-токену (Authorization: Bearer …).
+// Пускаем только тех, чья почта есть в таблице admins.
+async function getWebAdminEmail(req: Request): Promise<string | null> {
+  const auth = req.headers.get("authorization") ?? "";
+  const token = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
+  if (!token) return null;
+  const { data, error } = await supabase.auth.getUser(token);
+  const email = data?.user?.email?.toLowerCase();
+  if (error || !email) return null;
+  const { data: adm } = await supabase
+    .from("admins").select("email").ilike("email", email).maybeSingle();
+  return adm ? email : null;
+}
+
 // ---------- Telegram helpers ----------
 async function tg(method: string, body: unknown) {
   const r = await fetch(`${TG_API}/${method}`, {
@@ -209,6 +223,19 @@ Deno.serve(async (req) => {
   const path = url.pathname.replace(/^.*\/bot/, "") || "/";
 
   try {
+    // -------- Веб-админка: отправка сообщения пользователю через бота --------
+    if (path === "/admin-web/send-message" && req.method === "POST") {
+      const adminEmail = await getWebAdminEmail(req);
+      if (!adminEmail) return json({ error: "forbidden" }, 403);
+      const body = await req.json();
+      const chatId = Number(body.telegram_id);
+      const text = (body.text ?? "").toString().trim();
+      if (!chatId || !text) return json({ error: "bad params" }, 400);
+      const res = await tg("sendMessage", { chat_id: chatId, text });
+      if (res?.ok) return json({ ok: true });
+      return json({ error: res?.description || "send failed" }, 400);
+    }
+
     // -------- 1. Вебхук Telegram --------
     if (path === "/webhook" && req.method === "POST") {
       const update = await req.json();
