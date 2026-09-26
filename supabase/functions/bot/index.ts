@@ -623,6 +623,39 @@ Deno.serve(async (req) => {
       return json({ confirmation_url: pay.url });
     }
 
+    // -------- 3c-bis. Активная сверка оплаты (мини-апп зовёт при открытии «Заявок») --------
+    if (path === "/pay/check" && req.method === "POST") {
+      const u = await getInitUser(req);
+      if (!u) return json({ error: "unauthorized" }, 401);
+
+      // Неоплаченные онлайн-заявки пользователя, у которых есть токен bePaid
+      const { data: reqs } = await supabase
+        .from("requests")
+        .select("id, telegram_id, total, is_paid, payment_id, payment_method")
+        .eq("telegram_id", u.id)
+        .eq("is_paid", false)
+        .eq("payment_method", "online")
+        .not("payment_id", "is", null)
+        .limit(20);
+
+      let updated = 0;
+      for (const r of (reqs ?? [])) {
+        const status = await bpGetStatus(r.payment_id);
+        if (status === "successful") {
+          await supabase.from("requests").update({
+            is_paid: true, payment_status: "succeeded", paid_at: new Date().toISOString(),
+          }).eq("id", r.id);
+          updated++;
+          const sum = fmt(Number(r.total));
+          for (const adminId of ADMIN_IDS) {
+            try { await tg("sendMessage", { chat_id: adminId, text: `💳 Заявка #${r.id} оплачена (${sum}).` }); } catch (_e) { /* */ }
+          }
+          try { await tg("sendMessage", { chat_id: u.id, text: `✅ Оплата заявки #${r.id} получена. Спасибо!` }); } catch (_e) { /* */ }
+        }
+      }
+      return json({ ok: true, updated });
+    }
+
     // -------- 3c2. Способ оплаты без онлайн-платежа (наличные / перевод) --------
     if (path === "/method" && req.method === "POST") {
       const u = await getInitUser(req);

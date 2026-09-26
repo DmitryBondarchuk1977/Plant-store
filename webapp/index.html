@@ -961,6 +961,8 @@ const MY_FILTERS = [
   { key:"canceled",    label:"Отменённые" },
 ];
 async function loadOrders(){
+  // Сверяем онлайн-оплаты с bePaid (вебхук мог не долететь / приложение перезапустилось)
+  try { await api("/pay/check","POST",{}); } catch(_e){}
   const res = await api("/my/requests","POST",{});
   MY_REQUESTS = res?.requests || [];
   renderOrdersFilter();
