@@ -60,6 +60,13 @@ export function RequestsView() {
     load()
   }, [])
 
+  // авто-скрытие плашки уведомления
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(null), 4000)
+    return () => clearTimeout(t)
+  }, [notice])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return items

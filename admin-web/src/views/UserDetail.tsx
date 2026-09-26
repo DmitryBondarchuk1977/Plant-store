@@ -69,6 +69,12 @@ export function UserDetail({ user, onClose }: { user: AppUser; onClose: () => vo
     }
   }, [user.telegram_id])
 
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(null), 4000)
+    return () => clearTimeout(t)
+  }, [notice])
+
   const fullName =
     `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || 'Без имени'
 
