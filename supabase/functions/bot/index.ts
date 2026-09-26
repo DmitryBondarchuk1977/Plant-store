@@ -33,14 +33,15 @@ const YK_VAT     = Deno.env.get("YOOKASSA_VAT_CODE") ?? ""; // если зада
 // Авторизация bePaid — заголовок  Authorization: Basic <base64(shop_id:secret)>.
 // ⬇⬇⬇ ТЕСТОВЫЙ РЕЖИМ. Для приёма боевых платежей поменяй true на false. ⬇⬇⬇
 const BEPAID_TEST = true;
-// Готовый токен (base64 от "shop_id:secret_key"). Для боевого режима задай секрет
-// BEPAID_TOKEN в Supabase → Edge Functions → Secrets (или BEPAID_SHOP_ID + BEPAID_SECRET_KEY).
-// По умолчанию — старый ТЕСТОВЫЙ токен bePaid, чтобы можно было проверить без своего магазина.
+// Готовый токен bePaid — base64 от "shop_id:secret_key". Хранится ТОЛЬКО в секретах
+// (Supabase → Edge Functions → Secrets): BEPAID_TOKEN, либо BEPAID_SHOP_ID + BEPAID_SECRET_KEY.
+// В коде ключей нет. Для перехода на боевой режим: заменить секрет на боевой токен
+// и поставить BEPAID_TEST = false.
 const BEPAID_TOKEN =
   Deno.env.get("BEPAID_TOKEN") ??
   (Deno.env.get("BEPAID_SHOP_ID") && Deno.env.get("BEPAID_SECRET_KEY")
     ? btoa(`${Deno.env.get("BEPAID_SHOP_ID")}:${Deno.env.get("BEPAID_SECRET_KEY")}`)
-    : "NDIyNTozODM0ZmJlZjFmZTZlYTAyNGVmNzdmNWM3OWVjN2ZmMWJhNzEwZWE2MjQxYzA4YzJmMzQxYWZkYThhZjRjMWM0");
+    : "");
 const BEPAID_RETURN = Deno.env.get("PAYMENT_RETURN_URL") ?? WEBAPP_URL;
 const BEPAID_NOTIFY = `${Deno.env.get("SUPABASE_URL") ?? ""}/functions/v1/bot/bepaid`;
 const BEPAID_READY = !!BEPAID_TOKEN;
