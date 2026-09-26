@@ -261,6 +261,8 @@ td.editable { white-space: nowrap; }
   padding: 4px 7px;
   border-radius: 7px;
   vertical-align: middle;
+  display: inline-block;
+  transform: scaleX(-1);
 }
 .pencil:hover {
   background: var(--primary);
