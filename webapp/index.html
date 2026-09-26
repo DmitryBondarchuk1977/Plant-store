@@ -967,6 +967,27 @@ async function loadOrders(){
   MY_REQUESTS = res?.requests || [];
   renderOrdersFilter();
   renderOrdersList();
+  schedulePayPoll();
+}
+// Есть ли онлайн-заявка, ожидающая оплаты
+function hasPendingOnline(){
+  return MY_REQUESTS.some(r=> r.payment_method==="online" && !r.is_paid && Number(r.total)>0);
+}
+// Короткий авто-опрос: после оплаты вебхук может прийти с задержкой — перепроверяем несколько раз
+let payPollTimer = null, payPollLeft = 0;
+function schedulePayPoll(){
+  if(payPollTimer){ clearTimeout(payPollTimer); payPollTimer = null; }
+  if(!hasPendingOnline()){ payPollLeft = 0; return; }
+  if(payPollLeft <= 0) payPollLeft = 6;           // до 6 попыток
+  payPollTimer = setTimeout(async ()=>{
+    payPollLeft--;
+    try { await api("/pay/check","POST",{}); } catch(_e){}
+    const res = await api("/my/requests","POST",{});
+    MY_REQUESTS = res?.requests || [];
+    renderOrdersList();
+    if(payPollLeft > 0 && hasPendingOnline()) schedulePayPoll();
+    else { payPollLeft = 0; payPollTimer = null; }
+  }, 3000);                                        // каждые 3 сек
 }
 function renderOrdersFilter(){
   const box=$("orders-filter"); box.innerHTML="";
