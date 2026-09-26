@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import type { Request, RequestStatus, AppUser } from '../lib/types'
 import {
   getRequests,
@@ -18,12 +18,6 @@ const STATUS: { key: RequestStatus; label: string }[] = [
   { key: 'done', label: 'Выполнена' },
   { key: 'canceled', label: 'Отмена' },
 ]
-const STATUS_LABEL: Record<RequestStatus, string> = {
-  new: 'Новая',
-  in_progress: 'В работе',
-  done: 'Выполнена',
-  canceled: 'Отмена',
-}
 const canEdit = (s: RequestStatus) => s === 'new' || s === 'in_progress'
 
 const fmtDate = (s: string) =>
@@ -40,12 +34,15 @@ export function RequestsView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | RequestStatus>('all')
   const [search, setSearch] = useState('')
   const [busyId, setBusyId] = useState<number | null>(null)
   const [picking, setPicking] = useState<Request | null>(null)
   const [adding, setAdding] = useState(false)
   const [viewUser, setViewUser] = useState<AppUser | null>(null)
+
+  // drag-and-drop
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [overCol, setOverCol] = useState<RequestStatus | null>(null)
 
   async function load() {
     setLoading(true)
@@ -63,23 +60,25 @@ export function RequestsView() {
     load()
   }, [])
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: items.length }
-    for (const s of STATUS) c[s.key] = items.filter((r) => r.status === s.key).length
-    return c
-  }, [items])
-
-  const rows = useMemo(() => {
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
+    if (!q) return items
     return items.filter((r) => {
-      if (filter !== 'all' && r.status !== filter) return false
-      if (q) {
-        const name = `${r.customer_first_name ?? ''} ${r.customer_last_name ?? ''} ${r.phone ?? ''} #${r.id}`.toLowerCase()
-        if (!name.includes(q)) return false
-      }
-      return true
+      const hay = `${r.customer_first_name ?? ''} ${r.customer_last_name ?? ''} ${r.phone ?? ''} #${r.id}`.toLowerCase()
+      return hay.includes(q)
     })
-  }, [items, filter, search])
+  }, [items, search])
+
+  const byStatus = useMemo(() => {
+    const m: Record<RequestStatus, Request[]> = {
+      new: [],
+      in_progress: [],
+      done: [],
+      canceled: [],
+    }
+    for (const r of filtered) m[r.status].push(r)
+    return m
+  }, [filtered])
 
   async function changeStatus(r: Request, status: RequestStatus) {
     if (r.status === status) return
@@ -90,14 +89,38 @@ export function RequestsView() {
       return
     setBusyId(r.id)
     setNotice(null)
+    // оптимистично двигаем карточку
+    setItems((list) => list.map((x) => (x.id === r.id ? { ...x, status } : x)))
     try {
       const res = await setRequestStatus(r, status)
       await load()
       setNotice(
         res.notified
-          ? `Статус изменён, клиенту отправлено уведомление ✓`
-          : `Статус изменён, но уведомление клиенту не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
+          ? 'Статус изменён, клиенту отправлено уведомление ✓'
+          : `Статус изменён, но уведомление не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
       )
+    } catch (e) {
+      setError(errMsg(e))
+      await load()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function togglePaid(r: Request) {
+    const willPay = !r.is_paid
+    setBusyId(r.id)
+    setNotice(null)
+    try {
+      const res = await setRequestPaid(r.id, willPay)
+      await load()
+      if (willPay) {
+        setNotice(
+          res.notified
+            ? 'Оплата отмечена, клиенту отправлено уведомление ✓'
+            : `Оплата отмечена, но уведомление не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
+        )
+      }
     } catch (e) {
       setError(errMsg(e))
     } finally {
@@ -145,25 +168,25 @@ export function RequestsView() {
     }
   }
 
-  async function togglePaid(r: Request) {
-    const willPay = !r.is_paid
-    setBusyId(r.id)
-    setNotice(null)
-    try {
-      const res = await setRequestPaid(r.id, willPay)
-      await load()
-      if (willPay) {
-        setNotice(
-          res.notified
-            ? `Оплата отмечена, клиенту отправлено уведомление ✓`
-            : `Оплата отмечена, но уведомление не доставлено: ${res.notify_error || 'клиент не запускал бота'}`,
-        )
-      }
-    } catch (e) {
-      setError(errMsg(e))
-    } finally {
-      setBusyId(null)
-    }
+  // ---- drag handlers ----
+  function onDragStart(e: DragEvent, r: Request) {
+    setDragId(r.id)
+    e.dataTransfer.setData('text/plain', String(r.id))
+    e.dataTransfer.effectAllowed = 'move'
+  }
+  function onColDragOver(e: DragEvent, status: RequestStatus) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (overCol !== status) setOverCol(status)
+  }
+  function onColDrop(e: DragEvent, status: RequestStatus) {
+    e.preventDefault()
+    setOverCol(null)
+    const id = Number(e.dataTransfer.getData('text/plain')) || dragId
+    setDragId(null)
+    if (!id) return
+    const r = items.find((x) => x.id === id)
+    if (r && r.status !== status) changeStatus(r, status)
   }
 
   return (
@@ -175,27 +198,11 @@ export function RequestsView() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <span className="muted small hide-sm">Перетаскивайте карточки между колонками</span>
+        <div className="grow" />
         <button className="btn btn-sm" onClick={load}>
           Обновить
         </button>
-      </div>
-
-      <div className="chips">
-        <button
-          className={'chip' + (filter === 'all' ? ' on' : '')}
-          onClick={() => setFilter('all')}
-        >
-          Все · {counts.all ?? 0}
-        </button>
-        {STATUS.map((s) => (
-          <button
-            key={s.key}
-            className={'chip' + (filter === s.key ? ' on' : '')}
-            onClick={() => setFilter(s.key)}
-          >
-            {s.label} · {counts[s.key] ?? 0}
-          </button>
-        ))}
       </div>
 
       {error && <div className="error banner">{error}</div>}
@@ -203,100 +210,102 @@ export function RequestsView() {
 
       {loading ? (
         <div className="muted pad">Загрузка…</div>
-      ) : rows.length === 0 ? (
-        <div className="muted pad">Заявок нет</div>
       ) : (
-        <div className="req-list">
-          {rows.map((r) => (
+        <div className="board">
+          {STATUS.map((col) => (
             <div
-              key={r.id}
-              className={'req-card clickable st-' + r.status}
-              onClick={() => openUser(r)}
-              title={r.telegram_id ? 'Открыть карточку клиента' : undefined}
+              key={col.key}
+              className={'board-col' + (overCol === col.key ? ' drop' : '')}
+              onDragOver={(e) => onColDragOver(e, col.key)}
+              onDragLeave={() => setOverCol((c) => (c === col.key ? null : c))}
+              onDrop={(e) => onColDrop(e, col.key)}
             >
-              <div className="req-head">
-                <div className="req-id">
-                  #{r.id}
-                  <span className={'status-tag st-' + r.status}>
-                    {STATUS_LABEL[r.status]}
-                  </span>
-                  {r.is_paid && <span className="status-tag paid">оплачено</span>}
-                </div>
-                <div className="muted req-date">{fmtDate(r.created_at)}</div>
+              <div className={'board-col-head st-' + col.key}>
+                <span>{col.label}</span>
+                <span className="muted">{byStatus[col.key].length}</span>
               </div>
 
-              <div className="req-customer">
-                <b>
-                  {(r.customer_first_name ?? '') + ' ' + (r.customer_last_name ?? '')}
-                </b>
-                {r.phone && (
-                  <a
-                    className="req-phone"
-                    href={`tel:${r.phone}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {r.phone}
-                  </a>
-                )}
-              </div>
-
-              {r.comment && <div className="req-comment">💬 {r.comment}</div>}
-
-              <div className="req-items">
-                {r.items.map((it) => (
-                  <div key={it.id} className="req-item">
-                    <span>{it.product_name}</span>
-                    <span className="muted">
-                      {it.qty} × {byn(it.price)} = {byn(it.price * it.qty)}
-                    </span>
+              {byStatus[col.key].map((r) => (
+                <div
+                  key={r.id}
+                  className={'req-card board-card st-' + r.status + (dragId === r.id ? ' dragging' : '')}
+                  draggable
+                  onDragStart={(e) => onDragStart(e, r)}
+                  onDragEnd={() => {
+                    setDragId(null)
+                    setOverCol(null)
+                  }}
+                  onClick={() => openUser(r)}
+                  title={r.telegram_id ? 'Открыть карточку клиента' : undefined}
+                >
+                  <div className="req-head">
+                    <div className="req-id">
+                      #{r.id}
+                      {r.is_paid && <span className="status-tag paid">оплачено</span>}
+                    </div>
+                    <div className="muted req-date">{fmtDate(r.created_at)}</div>
                   </div>
-                ))}
-              </div>
 
-              <div className="req-foot">
-                <div className="req-total">Итого: {byn(r.total)}</div>
-                <div className="req-actions" onClick={(e) => e.stopPropagation()}>
-                  <select
-                    className="input select-sm"
-                    value={r.status}
-                    disabled={busyId === r.id}
-                    onChange={(e) => changeStatus(r, e.target.value as RequestStatus)}
-                  >
-                    {STATUS.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
-                      </option>
+                  <div className="req-customer">
+                    <b>{(r.customer_first_name ?? '') + ' ' + (r.customer_last_name ?? '')}</b>
+                    {r.phone && (
+                      <a
+                        className="req-phone"
+                        href={`tel:${r.phone}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {r.phone}
+                      </a>
+                    )}
+                  </div>
+
+                  {r.comment && <div className="req-comment">💬 {r.comment}</div>}
+
+                  <div className="req-items">
+                    {r.items.map((it) => (
+                      <div key={it.id} className="req-item">
+                        <span>{it.product_name}</span>
+                        <span className="muted">
+                          {it.qty} × {byn(it.price)} = {byn(it.price * it.qty)}
+                        </span>
+                      </div>
                     ))}
-                  </select>
-                  <button
-                    className={'btn btn-sm' + (r.is_paid ? '' : ' btn-primary')}
-                    disabled={busyId === r.id}
-                    onClick={() => togglePaid(r)}
-                  >
-                    {r.is_paid ? 'Снять оплату' : 'Отметить оплату'}
-                  </button>
-                  {canEdit(r.status) && (
-                    <button
-                      className="btn btn-sm"
-                      disabled={busyId === r.id}
-                      onClick={() => setPicking(r)}
-                    >
-                      + Позиция
-                    </button>
-                  )}
+                  </div>
+
+                  <div className="req-foot">
+                    <div className="req-total">Итого: {byn(r.total)}</div>
+                    <div className="req-actions" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className={'btn btn-sm' + (r.is_paid ? '' : ' btn-primary')}
+                        disabled={busyId === r.id}
+                        onClick={() => togglePaid(r)}
+                      >
+                        {r.is_paid ? 'Снять оплату' : 'Отметить оплату'}
+                      </button>
+                      {canEdit(r.status) && (
+                        <button
+                          className="btn btn-sm"
+                          disabled={busyId === r.id}
+                          onClick={() => setPicking(r)}
+                        >
+                          + Позиция
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
+
+              {byStatus[col.key].length === 0 && (
+                <div className="board-empty muted">перетащите сюда</div>
+              )}
             </div>
           ))}
         </div>
       )}
 
       {picking && (
-        <ProductPicker
-          busy={adding}
-          onClose={() => setPicking(null)}
-          onAdd={addItem}
-        />
+        <ProductPicker busy={adding} onClose={() => setPicking(null)} onAdd={addItem} />
       )}
 
       {viewUser && (

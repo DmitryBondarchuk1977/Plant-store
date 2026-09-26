@@ -214,6 +214,19 @@ export function CatalogTable() {
           />
           Нет в наличии
         </label>
+        <button
+          className="btn btn-sm"
+          onClick={() => {
+            setSearch('')
+            setCatId('')
+            setSubId('')
+            setOnlyNew(false)
+            setOnlyOut(false)
+          }}
+          disabled={!search && !catId && !subId && !onlyNew && !onlyOut}
+        >
+          Сбросить
+        </button>
         <button className="btn btn-sm" onClick={load}>
           Обновить
         </button>
