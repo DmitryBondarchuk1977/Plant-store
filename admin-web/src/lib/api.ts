@@ -71,6 +71,8 @@ export type ProductInput = {
   stock: number | null
   is_active: boolean
   is_new: boolean
+  is_collectible: boolean
+  is_budget: boolean
   article: string | null
   coef: number | null
   rarity: number | null

@@ -33,6 +33,9 @@ export type Product = {
   rarity: number | null
   prospect: number | null
   is_new: boolean
+  // админские метки (видны только в админке)
+  is_collectible: boolean
+  is_budget: boolean
   // ручные продажи (складываются с расчётом из заявок)
   sold_manual: number
   revenue_manual: number

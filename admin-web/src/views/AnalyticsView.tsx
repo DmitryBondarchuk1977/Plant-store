@@ -136,12 +136,23 @@ export function AnalyticsView() {
     let totalRevenue = 0
     let totalUnits = 0
     let totalCost = 0
+    // метки: коллекционные / бюджетные
+    const coll = { units: 0, revenue: 0 }
+    const bud = { units: 0, revenue: 0 }
     for (const a of agg.values()) {
       totalRevenue += a.revenue
       totalUnits += a.units
       const prod = a.productId ? prodMap.get(a.productId) : undefined
       const cost = prod?.cost_price != null ? Number(prod.cost_price) * a.units : 0
       totalCost += cost
+      if (prod?.is_collectible) {
+        coll.units += a.units
+        coll.revenue += a.revenue
+      }
+      if (prod?.is_budget) {
+        bud.units += a.units
+        bud.revenue += a.revenue
+      }
       const cid = a.category_id ?? NO_CAT
       const cname = a.category_id ? catName.get(a.category_id) ?? 'Без категории' : 'Без категории'
       const cur =
@@ -163,6 +174,8 @@ export function AnalyticsView() {
       catRows,
       prodRows,
       autoByProduct,
+      collectible: coll,
+      budget: bud,
       totalRevenue,
       totalUnits,
       totalCost,
@@ -236,6 +249,57 @@ export function AnalyticsView() {
               <div className="kpi-val">{num(data.orders, 0)}</div>
             </div>
           </div>
+
+          <div className="an-title">Коллекционные и бюджетные</div>
+          {data.collectible.units === 0 && data.budget.units === 0 ? (
+            <div className="muted pad">
+              Нет продаж помеченных товаров. Отметьте товары как «Коллекционное» или
+              «Бюджетное» в карточке товара.
+            </div>
+          ) : (
+            <>
+              <div className="kpis two">
+                <div
+                  className={
+                    'kpi tag-kpi' +
+                    (data.collectible.revenue >= data.budget.revenue &&
+                    data.collectible.revenue > 0
+                      ? ' leader'
+                      : '')
+                  }
+                >
+                  <div className="kpi-label">💎 Коллекционные</div>
+                  <div className="kpi-val">{byn(data.collectible.revenue)}</div>
+                  <div className="kpi-sub muted">
+                    продано {num(data.collectible.units, 0)} шт
+                  </div>
+                </div>
+                <div
+                  className={
+                    'kpi tag-kpi' +
+                    (data.budget.revenue > data.collectible.revenue ? ' leader' : '')
+                  }
+                >
+                  <div className="kpi-label">💰 Бюджетные</div>
+                  <div className="kpi-val">{byn(data.budget.revenue)}</div>
+                  <div className="kpi-sub muted">
+                    продано {num(data.budget.units, 0)} шт
+                  </div>
+                </div>
+              </div>
+              <div className="muted small an-note">
+                Лидер по выручке:{' '}
+                <b>
+                  {data.collectible.revenue === data.budget.revenue
+                    ? 'поровну'
+                    : data.collectible.revenue > data.budget.revenue
+                      ? 'коллекционные 💎'
+                      : 'бюджетные 💰'}
+                </b>
+                . Товар может быть в обеих группах, если отмечены обе метки.
+              </div>
+            </>
+          )}
 
           <div className="an-title">Продажи по категориям</div>
           {data.catRows.length === 0 ? (

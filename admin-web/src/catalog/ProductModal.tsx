@@ -55,6 +55,8 @@ export function ProductModal({
   )
   const [isActive, setIsActive] = useState(product?.is_active ?? true)
   const [isNew, setIsNew] = useState(product?.is_new ?? false)
+  const [isCollectible, setIsCollectible] = useState(product?.is_collectible ?? false)
+  const [isBudget, setIsBudget] = useState(product?.is_budget ?? false)
   const [article, setArticle] = useState(product?.article ?? '')
   const [coef, setCoef] = useState(product?.coef != null ? String(product.coef) : '')
   const [rarity, setRarity] = useState(
@@ -124,6 +126,8 @@ export function ProductModal({
       stock: intOrNull(stock),
       is_active: isActive,
       is_new: isNew,
+      is_collectible: isCollectible,
+      is_budget: isBudget,
       article: article.trim() || null,
       coef: numOrNull(coef),
       rarity: intOrNull(rarity),
@@ -272,6 +276,25 @@ export function ProductModal({
           <label className="chk">
             <input type="checkbox" checked={isNew} onChange={(e) => setIsNew(e.target.checked)} />
             Новинка
+          </label>
+        </div>
+
+        <div className="row2">
+          <label className="chk">
+            <input
+              type="checkbox"
+              checked={isCollectible}
+              onChange={(e) => setIsCollectible(e.target.checked)}
+            />
+            Коллекционное
+          </label>
+          <label className="chk">
+            <input
+              type="checkbox"
+              checked={isBudget}
+              onChange={(e) => setIsBudget(e.target.checked)}
+            />
+            Бюджетное
           </label>
         </div>
 
