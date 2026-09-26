@@ -29,6 +29,22 @@ const YK_SECRET  = Deno.env.get("YOOKASSA_SECRET_KEY") ?? "";
 const YK_RETURN  = Deno.env.get("PAYMENT_RETURN_URL") ?? WEBAPP_URL;
 const YK_VAT     = Deno.env.get("YOOKASSA_VAT_CODE") ?? ""; // если задан — формируем чек 54-ФЗ
 
+// ---------- bePaid (эквайринг BYN) ----------
+// Авторизация bePaid — заголовок  Authorization: Basic <base64(shop_id:secret)>.
+// ⬇⬇⬇ ТЕСТОВЫЙ РЕЖИМ. Для приёма боевых платежей поменяй true на false. ⬇⬇⬇
+const BEPAID_TEST = true;
+// Готовый токен (base64 от "shop_id:secret_key"). Для боевого режима задай секрет
+// BEPAID_TOKEN в Supabase → Edge Functions → Secrets (или BEPAID_SHOP_ID + BEPAID_SECRET_KEY).
+// По умолчанию — старый ТЕСТОВЫЙ токен bePaid, чтобы можно было проверить без своего магазина.
+const BEPAID_TOKEN =
+  Deno.env.get("BEPAID_TOKEN") ??
+  (Deno.env.get("BEPAID_SHOP_ID") && Deno.env.get("BEPAID_SECRET_KEY")
+    ? btoa(`${Deno.env.get("BEPAID_SHOP_ID")}:${Deno.env.get("BEPAID_SECRET_KEY")}`)
+    : "NDIyNTozODM0ZmJlZjFmZTZlYTAyNGVmNzdmNWM3OWVjN2ZmMWJhNzEwZWE2MjQxYzA4YzJmMzQxYWZkYThhZjRjMWM0");
+const BEPAID_RETURN = Deno.env.get("PAYMENT_RETURN_URL") ?? WEBAPP_URL;
+const BEPAID_NOTIFY = `${Deno.env.get("SUPABASE_URL") ?? ""}/functions/v1/bot/bepaid`;
+const BEPAID_READY = !!BEPAID_TOKEN;
+
 // Автонапоминания о неоплаченных заявках
 const CRON_SECRET      = Deno.env.get("CRON_SECRET") ?? "";
 const REMIND_AFTER_MIN = Number(Deno.env.get("REMIND_AFTER_MIN") ?? "60");    // через сколько минут после создания
@@ -80,6 +96,55 @@ async function ykGetPayment(id: string) {
   });
   if (!resp.ok) return null;
   return await resp.json();
+}
+
+// ---------- bePaid helpers ----------
+function bpAuth(): string {
+  return "Basic " + BEPAID_TOKEN;
+}
+// Создать платёж (checkout) → { id: token, url: redirect_url } | null
+async function bpCreatePayment(amount: number, description: string, requestId: number, phone?: string) {
+  const body = {
+    checkout: {
+      transaction_type: "payment",
+      test: BEPAID_TEST,
+      order: {
+        amount: Math.round(Number(amount) * 100), // в копейках
+        currency: "BYN",
+        description: description.slice(0, 255),
+        tracking_id: String(requestId),
+      },
+      settings: {
+        return_url: BEPAID_RETURN,
+        notification_url: BEPAID_NOTIFY,
+      },
+      ...(phone ? { customer: { phone } } : {}),
+    },
+  };
+  const resp = await fetch("https://checkout.bepaid.by/ctp/api/checkouts", {
+    method: "POST",
+    headers: {
+      "Authorization": bpAuth(),
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const token = data?.checkout?.token as string | undefined;
+  const url = data?.checkout?.redirect_url as string | undefined;
+  if (!token || !url) return null;
+  return { id: token, url, status: "pending" };
+}
+// Статус платежа по токену: "successful" | "failed" | "incomplete" | ...
+async function bpGetStatus(token: string): Promise<string | null> {
+  const resp = await fetch(`https://checkout.bepaid.by/ctp/api/checkouts/${token}`, {
+    headers: { "Authorization": bpAuth(), "Accept": "application/json" },
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  return (data?.checkout?.status as string) ?? null;
 }
 
 const supabase = createClient(
@@ -533,7 +598,7 @@ Deno.serve(async (req) => {
     if (path === "/pay" && req.method === "POST") {
       const u = await getInitUser(req);
       if (!u) return json({ error: "unauthorized" }, 401);
-      if (!YK_SHOP_ID || !YK_SECRET) return json({ error: "payments not configured" }, 503);
+      if (!BEPAID_READY) return json({ error: "payments not configured" }, 503);
 
       const body = await req.json();
       const reqId = Number(body.request_id);
@@ -548,10 +613,7 @@ Deno.serve(async (req) => {
       if (r.is_paid) return json({ error: "already paid" }, 409);
       if (!(Number(r.total) > 0)) return json({ error: "zero amount" }, 400);
 
-      const items = (r.items || []).map((i: { product_name: string; price: number; qty: number }) => ({
-        name: i.product_name, price: Number(i.price) * Number(i.qty), qty: Number(i.qty),
-      }));
-      const pay = await ykCreatePayment(Number(r.total), `Заявка #${r.id}`, r.id, r.phone || undefined, items);
+      const pay = await bpCreatePayment(Number(r.total), `Заявка #${r.id}`, r.id, r.phone || undefined);
       if (!pay || !pay.url) return json({ error: "payment create failed" }, 502);
 
       await supabase.from("requests")
@@ -634,13 +696,44 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    // -------- 3d-bis. Вебхук bePaid (вызывает bePaid, не фронт) --------
+    if (path === "/bepaid" && req.method === "POST") {
+      let evt: { transaction?: { tracking_id?: string; status?: string } };
+      try { evt = await req.json(); } catch { return json({ ok: true }); }
+      const tr = evt?.transaction;
+      const reqId = Number(tr?.tracking_id);
+      if (!reqId) return json({ ok: true });
+
+      const { data: r } = await supabase.from("requests").select("*").eq("id", reqId).single();
+      if (!r) return json({ ok: true });
+
+      // Не доверяем телу: перепроверяем статус по токену (payment_id).
+      const status = r.payment_id ? await bpGetStatus(r.payment_id) : (tr?.status ?? null);
+
+      if (status === "successful" && !r.is_paid) {
+        await supabase.from("requests").update({
+          is_paid: true, payment_status: "succeeded", paid_at: new Date().toISOString(),
+        }).eq("id", reqId);
+        const sum = fmt(Number(r.total));
+        for (const adminId of ADMIN_IDS) {
+          await tg("sendMessage", { chat_id: adminId, text: `💳 Заявка #${reqId} оплачена (${sum}).` });
+        }
+        if (r.telegram_id) {
+          try { await tg("sendMessage", { chat_id: r.telegram_id, text: `✅ Оплата заявки #${reqId} получена. Спасибо!` }); } catch (_e) { /* */ }
+        }
+      } else if (status === "failed" || status === "error") {
+        await supabase.from("requests").update({ payment_status: "canceled" }).eq("id", reqId);
+      }
+      return json({ ok: true });
+    }
+
     // -------- 3e. Cron: напоминания о неоплаченных заявках --------
     if (path === "/cron/remind" && req.method === "POST") {
       // защита: вызывать может только планировщик с правильным ключом
       if (!CRON_SECRET || req.headers.get("x-cron-key") !== CRON_SECRET) {
         return json({ error: "forbidden" }, 403);
       }
-      if (!YK_SHOP_ID || !YK_SECRET) return json({ error: "payments not configured" }, 503);
+      if (!BEPAID_READY) return json({ error: "payments not configured" }, 503);
 
       const now = Date.now();
 
@@ -683,10 +776,7 @@ Deno.serve(async (req) => {
       let sent = 0;
       for (const r of (reqs ?? [])) {
         if (!r.telegram_id) continue;
-        const items = (r.items || []).map((i: { product_name: string; price: number; qty: number }) => ({
-          name: i.product_name, price: Number(i.price) * Number(i.qty), qty: Number(i.qty),
-        }));
-        const pay = await ykCreatePayment(Number(r.total), `Заявка #${r.id}`, r.id, r.phone || undefined, items);
+        const pay = await bpCreatePayment(Number(r.total), `Заявка #${r.id}`, r.id, r.phone || undefined);
         if (!pay || !pay.url) continue;
         try {
           await tg("sendMessage", {
