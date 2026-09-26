@@ -732,17 +732,20 @@ Deno.serve(async (req) => {
 
     // -------- 3d-bis. Вебхук bePaid (вызывает bePaid, не фронт) --------
     if (path === "/bepaid" && req.method === "POST") {
-      let evt: { transaction?: { tracking_id?: string; status?: string } };
+      let evt: { transaction?: { tracking_id?: string; status?: string }; tracking_id?: string; status?: string };
       try { evt = await req.json(); } catch { return json({ ok: true }); }
-      const tr = evt?.transaction;
+      const tr = evt?.transaction ?? evt; // тело может быть {transaction:{…}} или сразу {…}
       const reqId = Number(tr?.tracking_id);
       if (!reqId) return json({ ok: true });
 
       const { data: r } = await supabase.from("requests").select("*").eq("id", reqId).single();
       if (!r) return json({ ok: true });
 
-      // Не доверяем телу: перепроверяем статус по токену (payment_id).
-      const status = r.payment_id ? await bpGetStatus(r.payment_id) : (tr?.status ?? null);
+      // В тестовом режиме bePaid не отдаёт статус по токену → доверяем статусу из тела вебхука.
+      // В боевом — перепроверяем запросом к bePaid (не доверяем телу).
+      const status = BEPAID_TEST
+        ? (tr?.status ?? null)
+        : (r.payment_id ? await bpGetStatus(r.payment_id) : (tr?.status ?? null));
 
       if (status === "successful" && !r.is_paid) {
         await supabase.from("requests").update({
