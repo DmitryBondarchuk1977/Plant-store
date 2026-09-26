@@ -76,6 +76,7 @@ export type RequestItem = {
   product_id: string | null
   product_name: string
   price: number
+  cost_price: number | null
   qty: number
 }
 

@@ -82,12 +82,15 @@ export function AnalyticsView() {
       category_id: string | null
       units: number
       revenue: number
+      cost: number
     }
     const agg = new Map<string, Agg>()
 
     for (const r of included) {
       for (const it of r.items) {
         const rev = Number(it.price) * it.qty
+        // себестоимость — снапшот на момент заказа (честная маржа)
+        const cost = it.cost_price != null ? Number(it.cost_price) * it.qty : 0
         const pid = it.product_id
         const prod = pid ? prodMap.get(pid) : undefined
         const key = pid ?? 'n:' + it.product_name
@@ -99,9 +102,11 @@ export function AnalyticsView() {
             category_id: prod?.category_id ?? null,
             units: 0,
             revenue: 0,
+            cost: 0,
           }
         cur.units += it.qty
         cur.revenue += rev
+        cur.cost += cost
         agg.set(key, cur)
         if (pid) {
           const a = autoByProduct.get(pid) ?? { units: 0, revenue: 0 }
@@ -125,9 +130,11 @@ export function AnalyticsView() {
           category_id: p.category_id,
           units: 0,
           revenue: 0,
+          cost: 0,
         }
       cur.units += sold
       cur.revenue += rev
+      // ручные продажи без себестоимости — маржа по ним не считается
       agg.set(p.id, cur)
     }
 
@@ -143,7 +150,7 @@ export function AnalyticsView() {
       totalRevenue += a.revenue
       totalUnits += a.units
       const prod = a.productId ? prodMap.get(a.productId) : undefined
-      const cost = prod?.cost_price != null ? Number(prod.cost_price) * a.units : 0
+      const cost = a.cost
       totalCost += cost
       if (prod?.is_collectible) {
         coll.units += a.units
@@ -377,8 +384,11 @@ export function AnalyticsView() {
           )}
 
           <div className="muted small an-note">
-            Итог = продажи из заявок + ручные продажи. Маржа считается по текущей цене
-            закупки; ручные продажи в расчёт не зависят от выбранного периода.
+            Итог = продажи из заявок + ручные продажи. Себестоимость берётся из
+            зафиксированной цены закупки на момент заказа; у ручных продаж
+            себестоимости нет (их маржа не считается), и они не зависят от периода.
+            Заявки, созданные до этого обновления, могут быть без зафиксированной
+            себестоимости.
           </div>
         </>
       )}

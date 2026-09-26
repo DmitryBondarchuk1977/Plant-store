@@ -328,9 +328,9 @@ Deno.serve(async (req) => {
         return json({ error: "Позиции можно добавлять только в заявки «Новая» и «В работе»" }, 400);
       }
 
-      // Товар (цена фиксируется на момент добавления)
+      // Товар (цена и себестоимость фиксируются на момент добавления)
       const { data: prod, error: prodErr } = await supabase
-        .from("products").select("id, name, price").eq("id", productId).single();
+        .from("products").select("id, name, price, cost_price").eq("id", productId).single();
       if (prodErr || !prod) return json({ error: "product not found" }, 404);
 
       const { error: insErr } = await supabase.from("request_items").insert({
@@ -338,6 +338,7 @@ Deno.serve(async (req) => {
         product_id: prod.id,
         product_name: prod.name,
         price: prod.price,
+        cost_price: prod.cost_price ?? null,
         qty,
       });
       if (insErr) return json({ error: insErr.message }, 500);
@@ -447,7 +448,7 @@ Deno.serve(async (req) => {
       // Цены берём из БД, не доверяя клиенту
       const ids = items.map((i) => i.product_id);
       const { data: products } = await supabase
-        .from("products").select("id, name, price").in("id", ids);
+        .from("products").select("id, name, price, cost_price").in("id", ids);
       const byId = new Map((products ?? []).map((p) => [p.id, p]));
 
       let total = 0;
@@ -457,7 +458,13 @@ Deno.serve(async (req) => {
           const p = byId.get(i.product_id)!;
           const qty = Math.max(1, Number(i.qty) || 1);
           total += Number(p.price) * qty;
-          return { product_id: p.id, product_name: p.name, price: p.price, qty };
+          return {
+            product_id: p.id,
+            product_name: p.name,
+            price: p.price,
+            cost_price: p.cost_price ?? null,
+            qty,
+          };
         });
       if (!rows.length) return json({ error: "no valid items" }, 400);
 
