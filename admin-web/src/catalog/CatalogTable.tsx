@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Category, Subcategory, Product } from '../lib/types'
 import { getCategories, getSubcategories, getProducts } from '../lib/api'
-import { byn, num } from '../lib/format'
+import { num } from '../lib/format'
 import { ProductModal } from './ProductModal'
 import { CategoriesManager } from './CategoriesManager'
 import { QuickEditModal } from './QuickEditModal'
@@ -290,7 +290,7 @@ export function CatalogTable() {
                     <td>{catName.get(p.category_id ?? '') ?? '—'}</td>
 
                     <td className="r editable">
-                      <span className="cell-val">{byn(p.price)}</span>
+                      <span className="cell-val">{num(p.price)}</span>
                       <button className="pencil" title="Изменить" onClick={(e) => openQuick(e, p)}>
                         ✎
                       </button>
@@ -298,7 +298,7 @@ export function CatalogTable() {
 
                     <td className="r editable">
                       <span className="cell-val">
-                        {byn(p.cost_price)}
+                        {num(p.cost_price)}
                       </span>
                       <button className="pencil" title="Изменить" onClick={(e) => openQuick(e, p)}>
                         ✎

@@ -624,3 +624,10 @@ a.btn { text-decoration: none; display: inline-block; }
   background-position: right 6px center;
   padding-right: 26px;
 }
+
+/* Ровный столбик карандашей: фиксированная ширина числа в редактируемых ячейках */
+.catalog table.grid td.editable .cell-val {
+  display: inline-block;
+  min-width: 54px;
+  text-align: right;
+}
