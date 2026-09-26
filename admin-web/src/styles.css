@@ -571,3 +571,8 @@ a.btn { text-decoration: none; display: inline-block; }
 
 .kpis.two { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); max-width: 560px; }
 .tag-kpi.leader { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+
+/* Каталог: числовые колонки по центру — заголовок ровно над данными */
+.catalog table.grid td.r,
+.catalog table.grid th.r { text-align: center; }
+.catalog table.grid td.editable { white-space: nowrap; }
