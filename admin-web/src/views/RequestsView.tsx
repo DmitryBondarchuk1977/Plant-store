@@ -1,4 +1,16 @@
-import { useEffect, useMemo, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
 import type { Request, RequestStatus, AppUser } from '../lib/types'
 import {
   getRequests,
@@ -29,6 +41,120 @@ const fmtDate = (s: string) =>
     minute: '2-digit',
   })
 
+// ---- Колонка (droppable) ----
+function Column({
+  status,
+  label,
+  count,
+  children,
+}: {
+  status: RequestStatus
+  label: string
+  count: number
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: status })
+  return (
+    <div ref={setNodeRef} className={'board-col' + (isOver ? ' drop' : '')}>
+      <div className={'board-col-head st-' + status}>
+        <span>{label}</span>
+        <span className="muted">{count}</span>
+      </div>
+      {children}
+      {count === 0 && <div className="board-empty muted">перетащите сюда</div>}
+    </div>
+  )
+}
+
+// ---- Карточка (draggable) ----
+function Card({
+  r,
+  busyId,
+  onOpen,
+  onTogglePaid,
+  onAddPosition,
+}: {
+  r: Request
+  busyId: number | null
+  onOpen: (r: Request) => void
+  onTogglePaid: (r: Request) => void
+  onAddPosition: (r: Request) => void
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: String(r.id),
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={'req-card board-card st-' + r.status + (isDragging ? ' dragging' : '')}
+      onClick={() => onOpen(r)}
+      title={r.telegram_id ? 'Открыть карточку клиента' : undefined}
+    >
+      <div className="req-head">
+        <div className="req-id">
+          #{r.id}
+          {r.is_paid && <span className="status-tag paid">оплачено</span>}
+        </div>
+        <div className="muted req-date">{fmtDate(r.created_at)}</div>
+      </div>
+
+      <div className="req-customer">
+        <b>{(r.customer_first_name ?? '') + ' ' + (r.customer_last_name ?? '')}</b>
+        {r.phone && (
+          <a
+            className="req-phone"
+            href={`tel:${r.phone}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {r.phone}
+          </a>
+        )}
+      </div>
+
+      {r.comment && <div className="req-comment">💬 {r.comment}</div>}
+
+      <div className="req-items">
+        {r.items.map((it) => (
+          <div key={it.id} className="req-item">
+            <span>{it.product_name}</span>
+            <span className="muted">
+              {it.qty} × {byn(it.price)} = {byn(it.price * it.qty)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="req-foot">
+        <div className="req-total">Итого: {byn(r.total)}</div>
+        <div
+          className="req-actions"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            className={'btn btn-sm' + (r.is_paid ? '' : ' btn-primary')}
+            disabled={busyId === r.id}
+            onClick={() => onTogglePaid(r)}
+          >
+            {r.is_paid ? 'Снять оплату' : 'Отметить оплату'}
+          </button>
+          {canEdit(r.status) && (
+            <button
+              className="btn btn-sm"
+              disabled={busyId === r.id}
+              onClick={() => onAddPosition(r)}
+            >
+              + Позиция
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function RequestsView() {
   const [items, setItems] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,10 +165,12 @@ export function RequestsView() {
   const [picking, setPicking] = useState<Request | null>(null)
   const [adding, setAdding] = useState(false)
   const [viewUser, setViewUser] = useState<AppUser | null>(null)
+  const [activeId, setActiveId] = useState<number | null>(null)
 
-  // drag-and-drop
-  const [dragId, setDragId] = useState<number | null>(null)
-  const [overCol, setOverCol] = useState<RequestStatus | null>(null)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  )
 
   async function load() {
     setLoading(true)
@@ -60,7 +188,6 @@ export function RequestsView() {
     load()
   }, [])
 
-  // авто-скрытие плашки уведомления
   useEffect(() => {
     if (!notice) return
     const t = setTimeout(() => setNotice(null), 4000)
@@ -87,6 +214,8 @@ export function RequestsView() {
     return m
   }, [filtered])
 
+  const activeReq = activeId != null ? items.find((r) => r.id === activeId) ?? null : null
+
   async function changeStatus(r: Request, status: RequestStatus) {
     if (r.status === status) return
     if (
@@ -96,7 +225,6 @@ export function RequestsView() {
       return
     setBusyId(r.id)
     setNotice(null)
-    // оптимистично двигаем карточку
     setItems((list) => list.map((x) => (x.id === r.id ? { ...x, status } : x)))
     try {
       const res = await setRequestStatus(r, status)
@@ -175,24 +303,15 @@ export function RequestsView() {
     }
   }
 
-  // ---- drag handlers ----
-  function onDragStart(e: DragEvent, r: Request) {
-    setDragId(r.id)
-    e.dataTransfer.setData('text/plain', String(r.id))
-    e.dataTransfer.effectAllowed = 'move'
+  function onDragStart(e: DragStartEvent) {
+    setActiveId(Number(e.active.id))
   }
-  function onColDragOver(e: DragEvent, status: RequestStatus) {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (overCol !== status) setOverCol(status)
-  }
-  function onColDrop(e: DragEvent, status: RequestStatus) {
-    e.preventDefault()
-    setOverCol(null)
-    const id = Number(e.dataTransfer.getData('text/plain')) || dragId
-    setDragId(null)
-    if (!id) return
-    const r = items.find((x) => x.id === id)
+  function onDragEnd(e: DragEndEvent) {
+    setActiveId(null)
+    const overId = e.over?.id
+    if (!overId) return
+    const status = String(overId) as RequestStatus
+    const r = items.find((x) => x.id === Number(e.active.id))
     if (r && r.status !== status) changeStatus(r, status)
   }
 
@@ -205,7 +324,9 @@ export function RequestsView() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <span className="muted small hide-sm">Перетаскивайте карточки между колонками</span>
+        <span className="muted small hide-sm">
+          Перетаскивайте карточки между колонками (на телефоне — долгим нажатием)
+        </span>
         <div className="grow" />
         <button className="btn btn-sm" onClick={load}>
           Обновить
@@ -218,97 +339,48 @@ export function RequestsView() {
       {loading ? (
         <div className="muted pad">Загрузка…</div>
       ) : (
-        <div className="board">
-          {STATUS.map((col) => (
-            <div
-              key={col.key}
-              className={'board-col' + (overCol === col.key ? ' drop' : '')}
-              onDragOver={(e) => onColDragOver(e, col.key)}
-              onDragLeave={() => setOverCol((c) => (c === col.key ? null : c))}
-              onDrop={(e) => onColDrop(e, col.key)}
-            >
-              <div className={'board-col-head st-' + col.key}>
-                <span>{col.label}</span>
-                <span className="muted">{byStatus[col.key].length}</span>
-              </div>
+        <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+          <div className="board">
+            {STATUS.map((col) => (
+              <Column
+                key={col.key}
+                status={col.key}
+                label={col.label}
+                count={byStatus[col.key].length}
+              >
+                {byStatus[col.key].map((r) => (
+                  <Card
+                    key={r.id}
+                    r={r}
+                    busyId={busyId}
+                    onOpen={openUser}
+                    onTogglePaid={togglePaid}
+                    onAddPosition={setPicking}
+                  />
+                ))}
+              </Column>
+            ))}
+          </div>
 
-              {byStatus[col.key].map((r) => (
-                <div
-                  key={r.id}
-                  className={'req-card board-card st-' + r.status + (dragId === r.id ? ' dragging' : '')}
-                  draggable
-                  onDragStart={(e) => onDragStart(e, r)}
-                  onDragEnd={() => {
-                    setDragId(null)
-                    setOverCol(null)
-                  }}
-                  onClick={() => openUser(r)}
-                  title={r.telegram_id ? 'Открыть карточку клиента' : undefined}
-                >
-                  <div className="req-head">
-                    <div className="req-id">
-                      #{r.id}
-                      {r.is_paid && <span className="status-tag paid">оплачено</span>}
-                    </div>
-                    <div className="muted req-date">{fmtDate(r.created_at)}</div>
-                  </div>
-
-                  <div className="req-customer">
-                    <b>{(r.customer_first_name ?? '') + ' ' + (r.customer_last_name ?? '')}</b>
-                    {r.phone && (
-                      <a
-                        className="req-phone"
-                        href={`tel:${r.phone}`}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {r.phone}
-                      </a>
-                    )}
-                  </div>
-
-                  {r.comment && <div className="req-comment">💬 {r.comment}</div>}
-
-                  <div className="req-items">
-                    {r.items.map((it) => (
-                      <div key={it.id} className="req-item">
-                        <span>{it.product_name}</span>
-                        <span className="muted">
-                          {it.qty} × {byn(it.price)} = {byn(it.price * it.qty)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="req-foot">
-                    <div className="req-total">Итого: {byn(r.total)}</div>
-                    <div className="req-actions" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        className={'btn btn-sm' + (r.is_paid ? '' : ' btn-primary')}
-                        disabled={busyId === r.id}
-                        onClick={() => togglePaid(r)}
-                      >
-                        {r.is_paid ? 'Снять оплату' : 'Отметить оплату'}
-                      </button>
-                      {canEdit(r.status) && (
-                        <button
-                          className="btn btn-sm"
-                          disabled={busyId === r.id}
-                          onClick={() => setPicking(r)}
-                        >
-                          + Позиция
-                        </button>
-                      )}
-                    </div>
-                  </div>
+          <DragOverlay>
+            {activeReq ? (
+              <div className={'req-card board-card overlay-card st-' + activeReq.status}>
+                <div className="req-head">
+                  <div className="req-id">#{activeReq.id}</div>
+                  <div className="muted req-date">{fmtDate(activeReq.created_at)}</div>
                 </div>
-              ))}
-
-              {byStatus[col.key].length === 0 && (
-                <div className="board-empty muted">перетащите сюда</div>
-              )}
-            </div>
-          ))}
-        </div>
+                <div className="req-customer">
+                  <b>
+                    {(activeReq.customer_first_name ?? '') +
+                      ' ' +
+                      (activeReq.customer_last_name ?? '')}
+                  </b>
+                </div>
+                <div className="req-total">Итого: {byn(activeReq.total)}</div>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {picking && (

@@ -631,3 +631,10 @@ a.btn { text-decoration: none; display: inline-block; }
   min-width: 54px;
   text-align: right;
 }
+
+.overlay-card {
+  box-shadow: 0 12px 30px rgba(0,0,0,0.28);
+  cursor: grabbing;
+  width: 260px;
+  transform: rotate(1.5deg);
+}
