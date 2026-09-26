@@ -305,10 +305,12 @@ export function CatalogTable() {
                       </button>
                     </td>
 
-                    <td className="c badges badge-col">
-                      {p.is_new && <span className="badge new">NEW</span>}
-                      {!p.is_active && <span className="badge hidden">скрыт</span>}
-                      {out && <span className="badge out">нет</span>}
+                    <td className="c badge-col">
+                      <div className="badges">
+                        {p.is_new && <span className="badge new">NEW</span>}
+                        {!p.is_active && <span className="badge hidden">скрыт</span>}
+                        {out && <span className="badge out">нет</span>}
+                      </div>
                     </td>
                   </tr>
                 )

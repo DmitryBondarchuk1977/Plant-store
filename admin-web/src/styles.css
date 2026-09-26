@@ -272,7 +272,7 @@ td.editable { white-space: nowrap; }
 /* колонка «Метки» */
 .badge-col { min-width: 96px; }
 
-.badges { display: flex; gap: 4px; justify-content: center; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
 .badge {
   display: inline-block;
   padding: 2px 6px;
