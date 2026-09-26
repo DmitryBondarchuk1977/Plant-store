@@ -1035,7 +1035,7 @@ Deno.serve(async (req) => {
 
 // ---------- утилиты ----------
 function fmt(n: number): string {
-  return new Intl.NumberFormat("ru-RU").format(Math.round(Number(n))) + " ₽";
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(Number(n)) + " Br";
 }
 function escapeHtml(s: string): string {
   return s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]!));

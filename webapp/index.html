@@ -487,7 +487,7 @@
   <select id="af-category"></select>
   <label id="af-subcategory-label" class="hidden">Подкатегория</label>
   <select id="af-subcategory" class="hidden"></select>
-  <label>Цена, ₽</label>
+  <label>Цена, Br</label>
   <input id="af-price" type="number" inputmode="decimal" />
   <label>Остаток (пусто — не ограничен, 0 — нет в наличии)</label>
   <input id="af-stock" type="number" inputmode="numeric" placeholder="не ограничен" />
@@ -594,7 +594,7 @@ const CONFIG = {
 const tg = window.Telegram?.WebApp;
 const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON);
 const $ = (id) => document.getElementById(id);
-const fmt = (n) => new Intl.NumberFormat("ru-RU").format(Math.round(n)) + " ₽";
+const fmt = (n) => new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(Number(n)) + " Br";
 
 let PRODUCTS = [];           // активные товары каталога
 let CATEGORIES = [];         // категории
